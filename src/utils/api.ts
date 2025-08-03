@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Bus, Terminal, Route, NotificationPayload, BusReassignment, Feedback, FeedbackStats } from '../types';
 
 const API_URL = 'http://localhost:3000/api/admin';
+const CLIENT_API_URL = 'http://localhost:3000/api/client';
 
 // Helper function to handle API errors
 const handleApiError = (error: any) => {
@@ -245,3 +246,24 @@ export const adminAPI = {
     }
   },
 };
+
+export const bookingAPI = {
+    getBookings: async () => {
+      try {
+        const response = await axios.get(`${CLIENT_API_URL}/bookings`);
+        return { data: response.data };
+      } catch (error) {
+        handleApiError(error);
+        return { data: [] };
+      }
+    },
+    confirmBooking: async (bookingId: string) => {
+        try {
+          const response = await axios.put(`${API_URL}/booking/${bookingId}/confirm`);
+          return { data: response.data };
+        } catch (error) {
+          handleApiError(error);
+          return { data: null };
+        }
+      },
+  };

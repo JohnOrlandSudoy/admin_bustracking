@@ -23,7 +23,7 @@ export const BusesTab: React.FC = () => {
     terminal_id: '',
     route_id: '',
   });
-
+ 
   useEffect(() => {
     fetchData();
   }, []);

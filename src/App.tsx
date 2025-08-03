@@ -10,6 +10,7 @@ import { NotificationsTab } from './components/NotificationsTab';
 import { EmployeeTab } from './components/EmployeeTab';
 import { ConfirmEmployeeTab } from './components/ConfirmEmployeeTab';
 import { ReportsTab } from './components/ReportsTab';
+import { BookingsTab } from './components/BookingsTab';
 import { useAppContext } from './context/AppContext';
 import { busAPI, terminalAPI, routeAPI } from './utils/api';
 import { LoadingSpinner } from './components/LoadingSpinner';
@@ -104,6 +105,8 @@ function App() {
         return <ConfirmEmployeeTab />;
       case 'reports':
         return <ReportsTab />;
+      case 'bookings':
+        return <BookingsTab />;
       default:
         return <BusesTab />;
     }

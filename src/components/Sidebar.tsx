@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bus, MapPin, Route, Bell, LogOut, User, Users, MessageSquare, List, UserPlus, UserCheck, FileText } from 'lucide-react';
+import { Bus, MapPin, Route, Bell, LogOut, User, Users, MessageSquare, List, UserPlus, UserCheck, FileText, Bookmark } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
@@ -18,6 +18,7 @@ const tabs = [
   { id: 'employee', label: 'Add Employee', icon: UserPlus },
   { id: 'confirm-employee', label: 'Confirm Employee', icon: UserCheck },
   { id: 'reports', label: 'Reports', icon: FileText },
+  { id: 'bookings', label: 'Bookings', icon: Bookmark },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
