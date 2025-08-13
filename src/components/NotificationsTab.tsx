@@ -9,18 +9,27 @@ export const NotificationsTab: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<NotificationPayload>({
-    recipient_id: '',
+    recipient_ids: '',
     type: 'general',
     message: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate recipient_ids is not empty
+    if (!formData.recipient_ids.trim()) {
+      setError('Recipient ID is required');
+      return;
+    }
+    
     setLoading(true);
+    setError(null); // Clear any previous errors
+    
     try {
       await notificationAPI.sendNotification(formData);
       setSuccess('Notification sent successfully!');
-      setFormData({ recipient_id: '', type: 'general', message: '' });
+      setFormData({ recipient_ids: '', type: 'general', message: '' });
     } catch (err) {
       setError('Failed to send notification');
     } finally {
@@ -62,15 +71,21 @@ export const NotificationsTab: React.FC = () => {
       <div className="bg-white rounded-lg shadow-md p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Recipient ID</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Recipient IDs <span className="text-red-500">*</span>
+            </label>
             <input
               type="text"
-              value={formData.recipient_id}
-              onChange={(e) => setFormData(prev => ({...prev, recipient_id: e.target.value}))}
+              value={formData.recipient_ids}
+              onChange={(e) => setFormData(prev => ({...prev, recipient_ids: e.target.value}))}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-              placeholder="Enter recipient ID"
+              placeholder="Enter recipient ID (required)"
               required
+              minLength={1}
             />
+            {!formData.recipient_ids.trim() && (
+              <p className="mt-1 text-sm text-red-500">Recipient ID is required</p>
+            )}
           </div>
 
           <div>
@@ -139,7 +154,7 @@ export const NotificationsTab: React.FC = () => {
               </span>
             </div>
             <p className="text-gray-800">{formData.message}</p>
-            <p className="text-xs text-gray-500 mt-2">To: {formData.recipient_id || 'Recipient ID'}</p>
+            <p className="text-xs text-gray-500 mt-2">To: {formData.recipient_ids || 'Recipient ID'}</p>
           </div>
         </div>
       )}

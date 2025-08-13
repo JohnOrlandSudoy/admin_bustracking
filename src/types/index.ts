@@ -40,7 +40,7 @@ export interface Route {
 }
 
 export interface NotificationPayload {
-  recipient_id: string | null;
+  recipient_ids: string;
   type: 'delay' | 'route_change' | 'traffic' | 'general';
   message: string;
 }

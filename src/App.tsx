@@ -12,14 +12,16 @@ import { ConfirmEmployeeTab } from './components/ConfirmEmployeeTab';
 import { ReportsTab } from './components/ReportsTab';
 import { BookingsTab } from './components/BookingsTab';
 import { useAppContext } from './context/AppContext';
-import { busAPI, terminalAPI, routeAPI } from './utils/api';
+import { busAPI, terminalAPI, routeAPI, adminAPI } from './utils/api';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { ErrorAlert } from './components/ErrorAlert';
+import { RealTimeProvider } from './context/RealTimeContext';
 
 function App() {
   const [activeTab, setActiveTab] = useState('buses');
   const { state, dispatch } = useAppContext();
   const [error, setError] = useState<string | null>(null);
+  const [assignedEmployees, setAssignedEmployees] = useState<Record<string, any>>({});
 
   const getTabTitle = (tab: string) => {
     switch (tab) {
@@ -27,6 +29,38 @@ function App() {
         return 'Bus List';
       default:
         return tab.charAt(0).toUpperCase() + tab.slice(1);
+    }
+  };
+
+  // Fetch assigned employees data
+  const fetchAssignedEmployees = async () => {
+    if (!state.buses || state.buses.length === 0) return;
+    
+    const employeeDetails: Record<string, any> = {};
+    for (const bus of state.buses) {
+      if (bus.driver_id && !assignedEmployees[bus.driver_id]) {
+        try {
+          const response = await adminAPI.getEmployeeById(bus.driver_id);
+          if (response.data) {
+            employeeDetails[bus.driver_id] = response.data;
+          }
+        } catch (error) {
+          console.error(`Failed to fetch driver details for bus ${bus.id}`, error);
+        }
+      }
+      if (bus.conductor_id && !assignedEmployees[bus.conductor_id]) {
+        try {
+          const response = await adminAPI.getEmployeeById(bus.conductor_id);
+          if (response.data) {
+            employeeDetails[bus.conductor_id] = response.data;
+          }
+        } catch (error) {
+          console.error(`Failed to fetch conductor details for bus ${bus.id}`, error);
+        }
+      }
+    }
+    if (Object.keys(employeeDetails).length > 0) {
+      setAssignedEmployees(prev => ({...prev, ...employeeDetails}));
     }
   };
 
@@ -59,6 +93,11 @@ function App() {
     fetchData();
   }, [dispatch]);
 
+  // Fetch assigned employees when buses data changes
+  useEffect(() => {
+    fetchAssignedEmployees();
+  }, [state.buses]);
+
   const renderActiveTab = () => {
     // Show loading spinner if data is still loading
     if (
@@ -86,7 +125,16 @@ function App() {
     // Render the active tab
     switch (activeTab) {
       case 'buses':
-        return <BusesTab />;
+        return (
+          <BusesTab
+            buses={state.buses || []}
+            routes={state.routes || []}
+            terminals={state.terminals || []}
+            assignedEmployees={assignedEmployees}
+            loading={state.loading.buses}
+            error={state.errors.buses}
+          />
+        );
       case 'bus-list':
         return <BusListTab />;
       case 'terminals':
@@ -108,35 +156,46 @@ function App() {
       case 'bookings':
         return <BookingsTab />;
       default:
-        return <BusesTab />;
+        return (
+          <BusesTab
+            buses={state.buses || []}
+            routes={state.routes || []}
+            terminals={state.terminals || []}
+            assignedEmployees={assignedEmployees}
+            loading={state.loading.buses}
+            error={state.errors.buses}
+          />
+        );
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-white">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-      
-      <div className="ml-64 min-h-screen">
-        <header className="bg-white shadow-sm border-b border-pink-100">
-          <div className="px-8 py-6">
-            <h1 className="text-2xl font-bold text-gray-900">
-              {getTabTitle(activeTab)} Management
-            </h1>
-            <p className="text-gray-600 mt-1">
-              Manage your bus tracking system with ease
-            </p>
-          </div>
-        </header>
+    <RealTimeProvider>
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 to-white">
+        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
         
-        <main className="p-8">
-          {error ? (
-            <ErrorAlert message={error} onClose={() => setError(null)} />
-          ) : (
-            renderActiveTab()
-          )}
-        </main>
+        <div className="ml-64 min-h-screen">
+          <header className="bg-white shadow-sm border-b border-pink-100">
+            <div className="px-8 py-6">
+              <h1 className="text-2xl font-bold text-gray-900">
+                {getTabTitle(activeTab)} Management
+              </h1>
+              <p className="text-gray-600 mt-1">
+                Manage your bus tracking system with ease
+              </p>
+            </div>
+          </header>
+          
+          <main className="p-8">
+            {error ? (
+              <ErrorAlert message={error} onClose={() => setError(null)} />
+            ) : (
+              renderActiveTab()
+            )}
+          </main>
+        </div>
       </div>
-    </div>
+    </RealTimeProvider>
   );
 }
 

@@ -1,12 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Bus, Employee } from '../types';
+import { Bus, User } from '../types';
 import { busAPI, terminalAPI, routeAPI, adminAPI } from '../utils/api';
 import { BusMap } from './BusMap';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ErrorAlert } from './ErrorAlert';
 import { Settings, Users, MapPin, Phone, Mail } from 'lucide-react';
 
-export const BusesTab: React.FC = () => {
+interface BusesTabProps {
+  buses: Bus[];
+  routes: any[];
+  terminals: any[];
+  assignedEmployees: Record<string, any>;
+  loading: boolean;
+  error: string | null;
+}
+
+export const BusesTab: React.FC<BusesTabProps> = ({
+  buses: propBuses,
+  routes: propRoutes,
+  terminals: propTerminals,
+  assignedEmployees: propAssignedEmployees,
+  loading: propLoading,
+  error: propError
+}) => {
   const [buses, setBuses] = useState<Bus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,23 +32,54 @@ export const BusesTab: React.FC = () => {
   const [terminals, setTerminals] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
   const [assignEmployeeEmail, setAssignEmployeeEmail] = useState('');
-  const [assignedEmployees, setAssignedEmployees] = useState<Record<string, Employee>>({});
+  const [assignedEmployees, setAssignedEmployees] = useState<Record<string, User>>({});
   const [newBusForm, setNewBusForm] = useState({
     bus_number: '',
     total_seats: 50,
     terminal_id: '',
     route_id: '',
   });
+
+  // Debug logging
+  console.log('BusesTab props:', { propBuses, propRoutes, propTerminals, propAssignedEmployees, propLoading, propError });
+  console.log('BusesTab local state:', { buses, routes, terminals, loading, error });
+
+  // Use props if provided, otherwise use local state
+  const displayBuses = propBuses.length > 0 ? propBuses : buses;
+  const displayRoutes = propRoutes.length > 0 ? propRoutes : routes;
+  const displayTerminals = propTerminals.length > 0 ? propTerminals : terminals;
+  const displayAssignedEmployees = Object.keys(propAssignedEmployees).length > 0 ? propAssignedEmployees : assignedEmployees;
+  
+  // Simplified loading logic - only show loading if we have no data at all
+  const displayLoading = propLoading || (loading && displayBuses.length === 0 && displayRoutes.length === 0 && displayTerminals.length === 0);
+  const displayError = propError || error;
+
+  console.log('BusesTab display values:', { displayBuses, displayRoutes, displayTerminals, displayLoading, displayError });
  
   useEffect(() => {
-    fetchData();
-  }, []);
+    // Only fetch data if props are not provided
+    if (propBuses.length === 0 && propRoutes.length === 0 && propTerminals.length === 0) {
+      fetchData();
+    } else {
+      // If props are provided, set loading to false immediately
+      setLoading(false);
+      console.log('Using props data, setting loading to false');
+    }
+  }, [propBuses.length, propRoutes.length, propTerminals.length]);
+
+  // Update loading state when props change
+  useEffect(() => {
+    if (propBuses.length > 0 || propRoutes.length > 0 || propTerminals.length > 0) {
+      setLoading(false);
+      console.log('Props updated, setting loading to false');
+    }
+  }, [propBuses, propRoutes, propTerminals]);
 
   useEffect(() => {
     const fetchAssignedEmployees = async () => {
-      const employeeDetails: Record<string, Employee> = {};
-      for (const bus of buses) {
-        if (bus.driver_id && !assignedEmployees[bus.driver_id]) {
+      const employeeDetails: Record<string, User> = {};
+      for (const bus of displayBuses) {
+        if (bus.driver_id && !displayAssignedEmployees[bus.driver_id]) {
           try {
             const response = await adminAPI.getEmployeeById(bus.driver_id);
             if (response.data) {
@@ -42,7 +89,7 @@ export const BusesTab: React.FC = () => {
             console.error(`Failed to fetch driver details for bus ${bus.id}`, error);
           }
         }
-        if (bus.conductor_id && !assignedEmployees[bus.conductor_id]) {
+        if (bus.conductor_id && !displayAssignedEmployees[bus.conductor_id]) {
           try {
             const response = await adminAPI.getEmployeeById(bus.conductor_id);
             if (response.data) {
@@ -58,25 +105,35 @@ export const BusesTab: React.FC = () => {
       }
     };
 
-    if (buses.length > 0) {
+    if (displayBuses.length > 0) {
       fetchAssignedEmployees();
     }
-  }, [buses]);
+  }, [displayBuses, displayAssignedEmployees]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
+      setError(null);
+      console.log('Fetching bus management data...');
+      
       const [transitResponse, terminalsResponse, routesResponse] = await Promise.all([
         busAPI.getTransitInsights(),
         terminalAPI.getTerminals(),
         routeAPI.getRoutes()
       ]);
 
-      setBuses(transitResponse.data);
-      setTerminals(terminalsResponse.data);
-      setRoutes(routesResponse.data);
+      console.log('API responses:', { 
+        buses: transitResponse.data, 
+        terminals: terminalsResponse.data, 
+        routes: routesResponse.data 
+      });
+
+      setBuses(transitResponse.data || []);
+      setTerminals(terminalsResponse.data || []);
+      setRoutes(routesResponse.data || []);
     } catch (err) {
-      setError('Failed to fetch data');
+      console.error('Error fetching bus management data:', err);
+      setError('Failed to fetch data: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setLoading(false);
     }
@@ -140,7 +197,10 @@ export const BusesTab: React.FC = () => {
     }
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (displayLoading) {
+    console.log('Showing loading spinner, displayLoading:', displayLoading);
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="space-y-6">
@@ -163,7 +223,7 @@ export const BusesTab: React.FC = () => {
         </div>
       </div>
 
-      {error && <ErrorAlert message={error} onClose={() => setError(null)} />}
+      {displayError && <ErrorAlert message={displayError} onClose={() => setError(null)} />}
       {success && (
         <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between">
           <div className="flex items-center">
@@ -216,7 +276,7 @@ export const BusesTab: React.FC = () => {
                 required
               >
                 <option value="">Select Terminal</option>
-                {terminals.map((terminal) => (
+                {displayTerminals.map((terminal) => (
                   <option key={terminal.id} value={terminal.id}>
                     {terminal.name}
                   </option>
@@ -233,7 +293,7 @@ export const BusesTab: React.FC = () => {
                 required
               >
                 <option value="">Select Route</option>
-                {routes.map((route) => (
+                {displayRoutes.map((route) => (
                   <option key={route.id} value={route.id}>
                     {route.name}
                   </option>
@@ -266,14 +326,19 @@ export const BusesTab: React.FC = () => {
           <MapPin className="h-5 w-5 mr-2 text-pink-600" />
           Bus Locations
         </h3>
-        <BusMap buses={buses} />
+        <BusMap 
+          buses={displayBuses} 
+          routes={displayRoutes}
+          terminals={displayTerminals}
+          assignedEmployees={displayAssignedEmployees}
+        />
       </div>
 
       {/* Bus Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {buses.map((bus) => {
-          const driver = bus.driver_id ? assignedEmployees[bus.driver_id] : null;
-          const conductor = bus.conductor_id ? assignedEmployees[bus.conductor_id] : null;
+        {displayBuses.map((bus) => {
+          const driver = bus.driver_id ? displayAssignedEmployees[bus.driver_id] : null;
+          const conductor = bus.conductor_id ? displayAssignedEmployees[bus.conductor_id] : null;
 
           return (
             <div key={bus.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-all duration-200">
@@ -332,12 +397,12 @@ export const BusesTab: React.FC = () => {
 
                 <div className="flex items-center">
                   <MapPin className="h-4 w-4 mr-2" />
-                  Terminal: {terminals.find(t => t.id === bus.terminal_id)?.name || 'Not assigned'}
+                  Terminal: {displayTerminals.find(t => t.id === bus.terminal_id)?.name || 'Not assigned'}
                 </div>
 
                 <div className="flex items-center">
                   <MapPin className="h-4 w-4 mr-2" />
-                  Route: {routes.find(r => r.id === bus.route_id)?.name || 'Not assigned'}
+                  Route: {displayRoutes.find(r => r.id === bus.route_id)?.name || 'Not assigned'}
                 </div>
               </div>
 

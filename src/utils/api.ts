@@ -108,6 +108,28 @@ export const notificationAPI = {
       return { data: null };
     }
   },
+
+  // Get notifications for a specific client
+  getClientNotifications: async (userId: string) => {
+    try {
+      const response = await axios.get(`${CLIENT_API_URL}/notifications?userId=${userId}`);
+      return { data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { data: [] };
+    }
+  },
+
+  // Get notifications for a specific employee
+  getEmployeeNotifications: async (employeeId: string) => {
+    try {
+      const response = await axios.get(`${CLIENT_API_URL}/notifications?employeeId=${employeeId}`);
+      return { data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { data: [] };
+    }
+  },
 };
 
 export const userAPI = {
