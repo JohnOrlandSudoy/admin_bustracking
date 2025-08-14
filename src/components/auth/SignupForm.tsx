@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { AlertCircle, Mail, CheckCircle } from 'lucide-react';
 
 interface SignupFormProps {
-  onSuccess?: () => void;
+  onSuccess?: (email: string) => void;
 }
 
 export const SignupForm: React.FC<SignupFormProps> = ({ onSuccess }) => {
@@ -106,9 +106,13 @@ export const SignupForm: React.FC<SignupFormProps> = ({ onSuccess }) => {
       if (result.needsConfirmation) {
         console.log('✅ Signup successful, showing confirmation screen');
         setShowConfirmation(true);
+        // Also call onSuccess to show the main confirmation page
+        if (onSuccess) {
+          onSuccess(formData.email);
+        }
       } else if (onSuccess) {
         console.log('✅ Signup successful, calling onSuccess callback');
-        onSuccess();
+        onSuccess(formData.email);
       }
     } else {
       console.log('❌ Signup failed, error should be displayed via context');
