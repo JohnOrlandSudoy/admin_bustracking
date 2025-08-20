@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { Bus, Terminal, Route, NotificationPayload, BusReassignment, Feedback, FeedbackStats } from '../types';
 
-const API_URL = 'http://localhost:3000/api/admin';
-const CLIENT_API_URL = 'http://localhost:3000/api/client';
+const API_URL = 'https://backendbus-sumt.onrender.com/api/admin';
+const CLIENT_API_URL = 'https://backendbus-sumt.onrender.com/api/client';
 
 // Helper function to handle API errors
 const handleApiError = (error: any) => {
@@ -28,6 +28,26 @@ export const busAPI = {
     } catch (error) {
       handleApiError(error);
       return { data: [] };
+    }
+  },
+
+  updateBus: async (busId: string, busData: Partial<Bus>) => {
+    try {
+      const response = await axios.put(`${API_URL}/bus/${busId}`, busData);
+      return { data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
+    }
+  },
+
+  deleteBus: async (busId: string) => {
+    try {
+      const response = await axios.delete(`${API_URL}/bus/${busId}`);
+      return { data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
     }
   },
 
@@ -74,6 +94,26 @@ export const terminalAPI = {
       return { data: null };
     }
   },
+
+  updateTerminal: async (terminalId: string, terminalData: Partial<Terminal>) => {
+    try {
+      const response = await axios.put(`${API_URL}/terminal/${terminalId}`, terminalData);
+      return { data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
+    }
+  },
+
+  deleteTerminal: async (terminalId: string) => {
+    try {
+      const response = await axios.delete(`${API_URL}/terminal/${terminalId}`);
+      return { data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
+    }
+  },
 };
 
 export const routeAPI = {
@@ -90,6 +130,26 @@ export const routeAPI = {
   createRoute: async (routeData: { name: string; start_terminal_id: string; end_terminal_id: string }) => {
     try {
       const response = await axios.post(`${API_URL}/route`, routeData);
+      return { data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
+    }
+  },
+
+  updateRoute: async (routeId: string, routeData: Partial<Route>) => {
+    try {
+      const response = await axios.put(`${API_URL}/route/${routeId}`, routeData);
+      return { data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
+    }
+  },
+
+  deleteRoute: async (routeId: string) => {
+    try {
+      const response = await axios.delete(`${API_URL}/route/${routeId}`);
       return { data: response.data };
     } catch (error) {
       handleApiError(error);
@@ -160,6 +220,16 @@ export const userAPI = {
     } catch (error) {
       handleApiError(error);
       return { data: [] };
+    }
+  },
+
+  deleteUser: async (userId: string) => {
+    try {
+      const response = await axios.delete(`${API_URL}/user/${userId}`);
+      return { data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
     }
   },
 };

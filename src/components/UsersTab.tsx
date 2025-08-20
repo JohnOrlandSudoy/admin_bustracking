@@ -18,6 +18,8 @@ export const UsersTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'clients' | 'employees'>('all');
+  const [deleteTarget, setDeleteTarget] = useState<ApiUser | null>(null);
+  const [confirmInput, setConfirmInput] = useState('');
 
   useEffect(() => {
     fetchUsers();
@@ -124,6 +126,9 @@ export const UsersTab: React.FC = () => {
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 ID
               </th>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -152,6 +157,14 @@ export const UsersTab: React.FC = () => {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <div className="max-w-xs truncate">{user.id}</div>
                 </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right">
+                  <button
+                    onClick={() => { setDeleteTarget(user); setConfirmInput(''); }}
+                    className="border border-red-300 text-red-600 py-1.5 px-3 rounded-lg hover:bg-red-50 transition-all duration-200 text-sm"
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -164,6 +177,51 @@ export const UsersTab: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[1000]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md relative">
+            <h3 className="text-xl font-semibold mb-2 text-red-600">Delete User</h3>
+            <p className="text-sm text-gray-600 mb-4">This action cannot be undone.</p>
+            <div className="mb-4 text-sm bg-red-50 border border-red-200 rounded p-3">
+              <p className="text-red-700">Type the user's email to confirm:</p>
+              <p className="mt-1 font-mono text-red-800">{deleteTarget.email}</p>
+            </div>
+            <input
+              type="text"
+              value={confirmInput}
+              onChange={(e) => setConfirmInput(e.target.value)}
+              placeholder="Type email to confirm"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500 mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+                disabled={confirmInput !== deleteTarget.email}
+                onClick={async () => {
+                  try {
+                    await userAPI.deleteUser(deleteTarget.id);
+                    await fetchUsers();
+                    setDeleteTarget(null);
+                    setConfirmInput('');
+                  } catch (err) {
+                    setError('Failed to delete user');
+                  }
+                }}
+                className={`py-2 px-6 rounded-lg transition-all duration-200 ${confirmInput === deleteTarget.email ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-200 text-white cursor-not-allowed'}`}
+              >
+                Permanently Delete
+              </button>
+              <button
+                onClick={() => { setDeleteTarget(null); setConfirmInput(''); }}
+                className="border border-gray-300 text-gray-700 py-2 px-6 rounded-lg hover:bg-gray-50 transition-all duration-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

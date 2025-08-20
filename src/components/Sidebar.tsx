@@ -19,6 +19,7 @@ const tabs = [
   { id: 'confirm-employee', label: 'Confirm Employee', icon: UserCheck },
   { id: 'reports', label: 'Reports', icon: FileText },
   { id: 'bookings', label: 'Bookings', icon: Bookmark },
+  { id: 'map-test', label: 'Map Test', icon: MapPin },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {

@@ -25,6 +25,8 @@ interface RealTimeContextType {
   stopLocationTracking: () => void;
   isLocationTracking: boolean;
   currentLocation: { lat: number; lng: number; accuracy?: number } | null;
+  // Test/dev: simulate user location without geolocation/websocket
+  simulateLocation: (loc: { lat: number; lng: number; accuracy?: number }) => void;
 }
 
 const RealTimeContext = createContext<RealTimeContextType | undefined>(undefined);
@@ -204,6 +206,19 @@ export const RealTimeProvider: React.FC<RealTimeProviderProps> = ({ children }) 
     locationHistoryRef.current.clear();
   }, []);
 
+  // Simulate user location (for testing without WebSocket/geolocation)
+  const simulateLocation = useCallback((loc: { lat: number; lng: number; accuracy?: number }) => {
+    setCurrentLocation(loc);
+    if (showLocationHistory) {
+      const history = locationHistoryRef.current.get('current_employee') || [];
+      history.push({ lat: loc.lat, lng: loc.lng, timestamp: new Date().toISOString() });
+      if (history.length > 50) {
+        history.splice(0, history.length - 50);
+      }
+      locationHistoryRef.current.set('current_employee', history);
+    }
+  }, [showLocationHistory]);
+
   // Setup WebSocket listeners
   useEffect(() => {
     const unsubscribeMessage = websocketService.onMessage(handleWebSocketMessage);
@@ -238,7 +253,8 @@ export const RealTimeProvider: React.FC<RealTimeProviderProps> = ({ children }) 
     startLocationTracking,
     stopLocationTracking,
     isLocationTracking,
-    currentLocation
+    currentLocation,
+    simulateLocation
   };
 
   return (

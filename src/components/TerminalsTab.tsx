@@ -14,6 +14,10 @@ export const TerminalsTab: React.FC = () => {
     name: '',
     address: '',
   });
+  const [editTerminal, setEditTerminal] = useState<Terminal | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', address: '' });
+  const [deleteTarget, setDeleteTarget] = useState<Terminal | null>(null);
+  const [confirmInput, setConfirmInput] = useState('');
 
   useEffect(() => {
     fetchTerminals();
@@ -43,6 +47,38 @@ export const TerminalsTab: React.FC = () => {
       setFormData({ name: '', address: '' });
     } catch (err) {
       setError('Failed to create terminal');
+    }
+  };
+
+  const openEdit = (terminal: Terminal) => {
+    setEditTerminal(terminal);
+    setEditForm({ name: terminal.name, address: terminal.address });
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTerminal) return;
+    try {
+      await terminalAPI.updateTerminal(editTerminal.id, {
+        name: editForm.name,
+        address: editForm.address,
+      });
+      await fetchTerminals();
+      setEditTerminal(null);
+    } catch (err) {
+      setError('Failed to update terminal');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await terminalAPI.deleteTerminal(deleteTarget.id);
+      await fetchTerminals();
+      setDeleteTarget(null);
+      setConfirmInput('');
+    } catch (err) {
+      setError('Failed to delete terminal');
     }
   };
 
@@ -124,6 +160,20 @@ export const TerminalsTab: React.FC = () => {
             <div className="space-y-2 text-sm text-gray-600">
               <p><strong>Address:</strong> {terminal.address}</p>
             </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => openEdit(terminal)}
+                className="border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 transition-all duration-200"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => { setDeleteTarget(terminal); setConfirmInput(''); }}
+                className="border border-red-300 text-red-600 py-2 px-4 rounded-lg hover:bg-red-50 transition-all duration-200"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -132,6 +182,72 @@ export const TerminalsTab: React.FC = () => {
         <div className="text-center py-12">
           <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-500">No terminals found. Add your first terminal!</p>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editTerminal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[1000]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md relative">
+            <h3 className="text-xl font-semibold mb-4">Edit Terminal</h3>
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Terminal Name</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm(prev => ({...prev, name: e.target.value}))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={editForm.address}
+                  onChange={(e) => setEditForm(prev => ({...prev, address: e.target.value}))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  required
+                />
+              </div>
+              <div className="flex gap-3">
+                <button type="submit" className="bg-gradient-to-r from-pink-500 to-pink-600 text-white py-2 px-6 rounded-lg hover:from-pink-600 hover:to-pink-700 transition-all duration-200">Save</button>
+                <button type="button" onClick={() => setEditTerminal(null)} className="border border-gray-300 text-gray-700 py-2 px-6 rounded-lg hover:bg-gray-50 transition-all duration-200">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[1000]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md relative">
+            <h3 className="text-xl font-semibold mb-2 text-red-600">Delete Terminal {deleteTarget.name}</h3>
+            <p className="text-sm text-gray-600 mb-4">This action cannot be undone.</p>
+            <div className="mb-4 text-sm bg-red-50 border border-red-200 rounded p-3">
+              <p className="text-red-700">Type the terminal name to confirm:</p>
+              <p className="mt-1 font-mono text-red-800">{deleteTarget.name}</p>
+            </div>
+            <input
+              type="text"
+              value={confirmInput}
+              onChange={(e) => setConfirmInput(e.target.value)}
+              placeholder="Type terminal name to confirm"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500 mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+                disabled={confirmInput !== deleteTarget.name}
+                onClick={handleDelete}
+                className={`py-2 px-6 rounded-lg transition-all duration-200 ${confirmInput === deleteTarget.name ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-200 text-white cursor-not-allowed'}`}
+              >
+                Permanently Delete
+              </button>
+              <button onClick={() => { setDeleteTarget(null); setConfirmInput(''); }} className="border border-gray-300 text-gray-700 py-2 px-6 rounded-lg hover:bg-gray-50 transition-all duration-200">Cancel</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

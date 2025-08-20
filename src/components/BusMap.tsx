@@ -18,25 +18,32 @@ interface BusMapProps {
   assignedEmployees: Record<string, Employee>;
 }
 
-// Custom bus icon
+// Custom bus icon (local asset in public folder)
 const busIcon = new Icon({
-  iconUrl: 'https://maps.google.com/mapfiles/kml/shapes/bus.png',
+  iconUrl: '/bus-icon.png',
   iconSize: [32, 32],
   iconAnchor: [16, 16],
   popupAnchor: [0, -16],
 });
 
-// Special icon for current employee's bus
+// Special icon for current employee (user location)
 const currentEmployeeBusIcon = new Icon({
-  iconUrl: 'https://maps.google.com/mapfiles/kml/shapes/bus.png',
-  iconSize: [40, 40], // Larger icon for current employee
-  iconAnchor: [20, 20],
+  iconUrl: '/user-pin.png',
+  iconSize: [40, 40],
+  iconAnchor: [20, 40],
   popupAnchor: [0, -20],
 });
 
-const terminalIcon = new Icon({
-  iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-  iconSize: [28, 28],
+const startTerminalIcon = new Icon({
+  iconUrl: '/start-terminal.png',
+  iconSize: [40, 40],
+  iconAnchor: [14, 28],
+  popupAnchor: [0, -28],
+});
+
+const endTerminalIcon = new Icon({
+  iconUrl: '/end-terminal.png',
+  iconSize: [40, 40],
   iconAnchor: [14, 28],
   popupAnchor: [0, -28],
 });
@@ -69,47 +76,27 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
     }
   }, [showLocationHistory, currentLocation]);
 
-  // Auto-fit map to show all buses and current location
+  // Auto-fit map to show all buses and current location (fixed typing)
   useEffect(() => {
-    const allBuses = [...buses];
-    if (currentLocation) {
-      allBuses.push({ current_location: currentLocation } as any);
-    }
-    
-    if (allBuses.length > 0) {
-      const validBuses = allBuses.filter(bus => {
-        if ('current_location' in bus) {
-          // Current location
-          return bus.current_location && 
-                 bus.current_location.lat !== 0 && 
-                 bus.current_location.lng !== 0;
-        } else {
-          // Static bus
-          return bus.current_location && 
-                 bus.current_location.lat !== 0 && 
-                 bus.current_location.lng !== 0;
-        }
-      });
+    const latLngs: Array<[number, number]> = [];
 
-      if (validBuses.length === 1) {
-        const bus = validBuses[0];
-        if (bus.current_location) {
-          const lat = bus.current_location.lat;
-          const lng = bus.current_location.lng;
-          map.setView([lat, lng] as LatLngExpression, 15);
-        }
-      } else if (validBuses.length > 1) {
-        const latLngs = validBuses.map(bus => {
-          if (bus.current_location) {
-            return [bus.current_location.lat, bus.current_location.lng] as [number, number];
-          }
-          return [0, 0] as [number, number];
-        }).filter(([lat, lng]) => lat !== 0 && lng !== 0);
-        
-        if (latLngs.length > 0) {
-          map.fitBounds(latLngs);
-        }
+    // Add bus positions
+    for (const bus of buses) {
+      const loc = bus.current_location;
+      if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number' && loc.lat !== 0 && loc.lng !== 0) {
+        latLngs.push([loc.lat, loc.lng]);
       }
+    }
+
+    // Add current user location
+    if (currentLocation && currentLocation.lat !== 0 && currentLocation.lng !== 0) {
+      latLngs.push([currentLocation.lat, currentLocation.lng]);
+    }
+
+    if (latLngs.length === 1) {
+      map.setView(latLngs[0] as LatLngExpression, 15);
+    } else if (latLngs.length > 1) {
+      map.fitBounds(latLngs);
     }
   }, [buses, currentLocation, map]);
 
@@ -120,17 +107,32 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       />
 
-      {/* Draw routes as polylines */}
+      {/* Draw routes as polylines (fallback to straight line between start/end terminals) */}
       {buses.map(bus => {
         const route = getRoute(bus.route_id);
-        if (!route || !Array.isArray(route.path) || route.path.length === 0) return null;
-        // Only use points with valid lat/lng
-        const validPath = route.path.filter((pt: any) => Array.isArray(pt) && pt.length === 2 && typeof pt[0] === 'number' && typeof pt[1] === 'number');
-        if (validPath.length < 2) return null;
+        if (!route) return null;
+        let positions: any[] | null = null;
+        if (Array.isArray(route.path) && route.path.length > 0) {
+          const validPath = route.path.filter((pt: any) => Array.isArray(pt) && pt.length === 2 && typeof pt[0] === 'number' && typeof pt[1] === 'number');
+          if (validPath.length >= 2) {
+            positions = validPath;
+          }
+        }
+        if (!positions) {
+          const start = route.start_terminal_id ? getTerminal(route.start_terminal_id) : null;
+          const end = route.end_terminal_id ? getTerminal(route.end_terminal_id) : null;
+          if (start && end && typeof start.lat === 'number' && typeof start.lng === 'number' && typeof end.lat === 'number' && typeof end.lng === 'number') {
+            positions = [
+              [start.lat, start.lng],
+              [end.lat, end.lng]
+            ];
+          }
+        }
+        if (!positions) return null;
         return (
           <Polyline
             key={bus.id + '-route'}
-            positions={validPath}
+            positions={positions}
             color="blue"
             weight={4}
             opacity={0.7}
@@ -147,14 +149,14 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
         return (
           <React.Fragment key={bus.id + '-terminals'}>
             {startTerminal && typeof startTerminal.lat === 'number' && typeof startTerminal.lng === 'number' && (
-              <Marker position={[startTerminal.lat, startTerminal.lng]} icon={terminalIcon}>
+              <Marker position={[startTerminal.lat, startTerminal.lng]} icon={startTerminalIcon}>
                 <Popup>
                   <b>Start Terminal:</b> {startTerminal.name}
                 </Popup>
               </Marker>
             )}
             {endTerminal && typeof endTerminal.lat === 'number' && typeof endTerminal.lng === 'number' && (
-              <Marker position={[endTerminal.lat, endTerminal.lng]} icon={terminalIcon}>
+              <Marker position={[endTerminal.lat, endTerminal.lng]} icon={endTerminalIcon}>
                 <Popup>
                   <b>End Terminal:</b> {endTerminal.name}
                 </Popup>
@@ -165,7 +167,7 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
       })}
 
       {/* Static bus markers with detailed popups */}
-      {buses.map(bus => {
+      {buses.map((bus, idx) => {
         // Use bus current_location if available, else fallback to terminal location
         let lat: number | undefined = undefined;
         let lng: number | undefined = undefined;
@@ -179,10 +181,20 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
             lng = terminal.lng;
           }
         }
-        if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+        // Final fallback: place near map center so every bus renders a marker
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+          const center = map.getCenter();
+          const jitterRadius = 0.001; // ~100m depending on latitude
+          const angle = (idx * 2 * Math.PI) / Math.max(buses.length, 1);
+          lat = center.lat + jitterRadius * Math.cos(angle);
+          lng = center.lng + jitterRadius * Math.sin(angle);
+        }
         const driver = bus.driver_id ? assignedEmployees[bus.driver_id] : null;
+        const conductor = bus.conductor_id ? assignedEmployees[bus.conductor_id] : null;
         const route = getRoute(bus.route_id);
         const terminal = bus.terminal_id ? getTerminal(bus.terminal_id) : null;
+        const startTerminal = route?.start_terminal_id ? getTerminal(route.start_terminal_id) : null;
+        const endTerminal = route?.end_terminal_id ? getTerminal(route.end_terminal_id) : null;
         return (
           <Marker
             key={bus.id}
@@ -196,7 +208,7 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
             <Popup>
               <div style={{ minWidth: 220 }} className="text-sm font-sans">
                 <div className="flex items-center mb-2">
-                  <img src="https://maps.google.com/mapfiles/kml/shapes/bus.png" alt="Bus" className="w-6 h-6 mr-2" />
+                  <img src="/bus-icon.png" alt="Bus" className="w-6 h-6 mr-2" />
                   <span className="font-bold text-pink-700 text-base">Bus {bus.bus_number}</span>
                 </div>
                 <div className="flex items-center mb-1">
@@ -205,19 +217,63 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
                   <span className="ml-1 font-medium text-gray-900">{driver ? driver.profile.fullName : 'Not assigned'}</span>
                 </div>
                 <div className="flex items-center mb-1">
+                  <svg className="w-4 h-4 mr-1 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg>
+                  <span className="text-gray-700">Status:</span>
+                  <span className="ml-1 font-medium text-gray-900">{bus.status}</span>
+                </div>
+                {driver && (
+                  <div className="ml-5 mb-1 text-xs text-gray-600 space-y-0.5">
+                    <div className="flex items-center">
+                      <svg className="w-3 h-3 mr-1 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" fill="none"/><path d="M22 6l-10 7L2 6"/></svg>
+                      <span>{driver.email}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <svg className="w-3 h-3 mr-1 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92V21a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2 3.18 2 2 0 0 1 4 1h4.09a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.36a2 2 0 0 1-.45 2.11L9.1 8.9a16 16 0 0 0 6 6l1.71-1.08a2 2 0 0 1 2.11-.45c.76.24 1.55.42 2.36.54A2 2 0 0 1 22 16.92z"/></svg>
+                      <span>{driver.profile?.phone}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center mb-1">
                   <svg className="w-4 h-4 mr-1 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3v4M8 3v4"/></svg>
                   <span className="text-gray-700">Seats:</span>
                   <span className="ml-1 font-medium text-gray-900">{bus.available_seats}/{bus.total_seats}</span>
                 </div>
                 <div className="flex items-center mb-1">
+                  <svg className="w-4 h-4 mr-1 text-indigo-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 20h5v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2h5"/><circle cx="12" cy="7" r="4"/></svg>
+                  <span className="text-gray-700">Conductor:</span>
+                  <span className="ml-1 font-medium text-gray-900">{conductor ? conductor.profile.fullName : 'Not assigned'}</span>
+                </div>
+                {conductor && (
+                  <div className="ml-5 mb-1 text-xs text-gray-600 space-y-0.5">
+                    <div className="flex items-center">
+                      <svg className="w-3 h-3 mr-1 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" fill="none"/><path d="M22 6l-10 7L2 6"/></svg>
+                      <span>{conductor.email}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <svg className="w-3 h-3 mr-1 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92V21a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2 3.18 2 2 0 0 1 4 1h4.09a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.36a2 2 0 0 1-.45 2.11L9.1 8.9a16 16 0 0 0 6 6l1.71-1.08a2 2 0 0 1 2.11-.45c.76.24 1.55.42 2.36.54A2 2 0 0 1 22 16.92z"/></svg>
+                      <span>{conductor.profile?.phone}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center mb-1">
                   <svg className="w-4 h-4 mr-1 text-purple-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17.657 16.657L13.414 12.414a2 2 0 0 0-2.828 0l-4.243 4.243"/><path d="M7 7h.01"/><path d="M17 7h.01"/></svg>
                   <span className="text-gray-700">Terminal:</span>
                   <span className="ml-1 font-medium text-gray-900">{terminal ? terminal.name : 'Not assigned'}</span>
                 </div>
-                <div className="flex items-center">
+                <div className="flex items-center mb-1">
                   <svg className="w-4 h-4 mr-1 text-orange-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 19V6M5 12l7-7 7 7"/></svg>
                   <span className="text-gray-700">Route:</span>
                   <span className="ml-1 font-medium text-gray-900">{route ? route.name : 'Not assigned'}</span>
+                </div>
+                <div className="flex items-center mb-1">
+                  <svg className="w-4 h-4 mr-1 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2l7 7-7 7-7-7 7-7z"/></svg>
+                  <span className="text-gray-700">Start Terminal:</span>
+                  <span className="ml-1 font-medium text-gray-900">{startTerminal ? startTerminal.name : 'Not assigned'}</span>
+                </div>
+                <div className="flex items-center">
+                  <svg className="w-4 h-4 mr-1 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2l7 7-7 7-7-7 7-7z"/></svg>
+                  <span className="text-gray-700">End Terminal:</span>
+                  <span className="ml-1 font-medium text-gray-900">{endTerminal ? endTerminal.name : 'Not assigned'}</span>
                 </div>
               </div>
             </Popup>
@@ -251,8 +307,8 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
             <div style={{ minWidth: 280 }} className="text-sm font-sans">
               <div className="flex items-center mb-3 pb-2 border-b border-green-200">
                 <img 
-                  src="https://maps.google.com/mapfiles/kml/shapes/bus.png" 
-                  alt="Bus" 
+                  src="/user-pin.png" 
+                  alt="You" 
                   className="w-8 h-8 mr-3" 
                 />
                 <div>

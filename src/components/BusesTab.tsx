@@ -39,6 +39,17 @@ export const BusesTab: React.FC<BusesTabProps> = ({
     terminal_id: '',
     route_id: '',
   });
+  const [editBus, setEditBus] = useState<Bus | null>(null);
+  const [editForm, setEditForm] = useState({
+    bus_number: '',
+    total_seats: 50,
+    terminal_id: '',
+    route_id: '',
+    status: 'inactive' as 'active' | 'inactive' | 'maintenance',
+    available_seats: 0,
+  });
+  const [deleteBusTarget, setDeleteBusTarget] = useState<Bus | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
 
   // Debug logging
   console.log('BusesTab props:', { propBuses, propRoutes, propTerminals, propAssignedEmployees, propLoading, propError });
@@ -185,6 +196,54 @@ export const BusesTab: React.FC<BusesTabProps> = ({
       }, 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to assign employee. The employee might not be active yet.');
+    }
+  };
+
+  const openEditModal = (bus: Bus) => {
+    setEditBus(bus);
+    setEditForm({
+      bus_number: bus.bus_number,
+      total_seats: bus.total_seats,
+      terminal_id: bus.terminal_id || '',
+      route_id: bus.route_id || '',
+      status: bus.status,
+      available_seats: bus.available_seats,
+    });
+  };
+
+  const handleUpdateBus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editBus) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      await busAPI.updateBus(editBus.id, {
+        bus_number: editForm.bus_number,
+        total_seats: Number(editForm.total_seats),
+        available_seats: Number(editForm.available_seats),
+        terminal_id: editForm.terminal_id || null,
+        route_id: editForm.route_id || null,
+        status: editForm.status,
+      } as any);
+      setSuccess('Bus updated successfully');
+      setEditBus(null);
+      await fetchData();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update bus');
+    }
+  };
+
+  const handleDeleteBus = async (busId: string) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      await busAPI.deleteBus(busId);
+      setSuccess('Bus deleted successfully');
+      await fetchData();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete bus');
     }
   };
 
@@ -339,6 +398,9 @@ export const BusesTab: React.FC<BusesTabProps> = ({
         {displayBuses.map((bus) => {
           const driver = bus.driver_id ? displayAssignedEmployees[bus.driver_id] : null;
           const conductor = bus.conductor_id ? displayAssignedEmployees[bus.conductor_id] : null;
+          const route = displayRoutes.find(r => r.id === bus.route_id);
+          const startTerminalName = route?.start_terminal_id ? (displayTerminals.find(t => t.id === route.start_terminal_id)?.name || 'Unknown') : 'Not assigned';
+          const endTerminalName = route?.end_terminal_id ? (displayTerminals.find(t => t.id === route.end_terminal_id)?.name || 'Unknown') : 'Not assigned';
 
           return (
             <div key={bus.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-all duration-200">
@@ -402,16 +464,40 @@ export const BusesTab: React.FC<BusesTabProps> = ({
 
                 <div className="flex items-center">
                   <MapPin className="h-4 w-4 mr-2" />
-                  Route: {displayRoutes.find(r => r.id === bus.route_id)?.name || 'Not assigned'}
+                  Route: {route?.name || 'Not assigned'}
+                </div>
+
+                <div className="flex items-center">
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Start Terminal: {startTerminalName}
+                </div>
+
+                <div className="flex items-center">
+                  <MapPin className="h-4 w-4 mr-2" />
+                  End Terminal: {endTerminalName}
                 </div>
               </div>
 
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => setSelectedBus(bus)}
+                  className="col-span-2 bg-gradient-to-r from-pink-500 to-pink-600 text-white py-2 px-4 rounded-lg hover:from-pink-600 hover:to-pink-700 transition-all duration-200 flex items-center justify-center"
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Assign Employee
+                </button>
+                <button
+                  onClick={() => openEditModal(bus)}
+                  className="border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 transition-all duration-200"
+                >
+                  Edit
+                </button>
+              </div>
               <button
-                onClick={() => setSelectedBus(bus)}
-                className="mt-4 w-full bg-gradient-to-r from-pink-500 to-pink-600 text-white py-2 px-4 rounded-lg hover:from-pink-600 hover:to-pink-700 transition-all duration-200 flex items-center justify-center"
+                onClick={() => { setDeleteBusTarget(bus); setDeleteConfirmInput(''); }}
+                className="mt-2 w-full border border-red-300 text-red-600 py-2 px-4 rounded-lg hover:bg-red-50 transition-all duration-200"
               >
-                <Settings className="h-4 w-4 mr-2" />
-                Assign Employee
+                Delete
               </button>
             </div>
           );
@@ -451,6 +537,140 @@ export const BusesTab: React.FC<BusesTabProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Bus Modal */}
+      {editBus && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[1000]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg relative">
+            <h3 className="text-xl font-semibold mb-4">Edit Bus {editBus.bus_number}</h3>
+            <form onSubmit={handleUpdateBus} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bus Number</label>
+                  <input
+                    type="text"
+                    value={editForm.bus_number}
+                    onChange={(e) => setEditForm(prev => ({...prev, bus_number: e.target.value}))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Seats</label>
+                  <input
+                    type="number"
+                    value={editForm.total_seats}
+                    onChange={(e) => setEditForm(prev => ({...prev, total_seats: parseInt(e.target.value) || 0}))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    min="1"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Available Seats</label>
+                  <input
+                    type="number"
+                    value={editForm.available_seats}
+                    onChange={(e) => setEditForm(prev => ({...prev, available_seats: parseInt(e.target.value) || 0}))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                    min="0"
+                    max={editForm.total_seats}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm(prev => ({...prev, status: e.target.value as any}))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  >
+                    <option value="active">active</option>
+                    <option value="inactive">inactive</option>
+                    <option value="maintenance">maintenance</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Terminal</label>
+                  <select
+                    value={editForm.terminal_id}
+                    onChange={(e) => setEditForm(prev => ({...prev, terminal_id: e.target.value}))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  >
+                    <option value="">Not assigned</option>
+                    {displayTerminals.map((terminal) => (
+                      <option key={terminal.id} value={terminal.id}>{terminal.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Route</label>
+                  <select
+                    value={editForm.route_id}
+                    onChange={(e) => setEditForm(prev => ({...prev, route_id: e.target.value}))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  >
+                    <option value="">Not assigned</option>
+                    {displayRoutes.map((route) => (
+                      <option key={route.id} value={route.id}>{route.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <button type="submit" className="bg-gradient-to-r from-pink-500 to-pink-600 text-white py-2 px-6 rounded-lg hover:from-pink-600 hover:to-pink-700 transition-all duration-200">
+                  Save Changes
+                </button>
+                <button type="button" onClick={() => setEditBus(null)} className="border border-gray-300 text-gray-700 py-2 px-6 rounded-lg hover:bg-gray-50 transition-all duration-200">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteBusTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[1000]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md relative">
+            <h3 className="text-xl font-semibold mb-2 text-red-600">Delete Bus {deleteBusTarget.bus_number}</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              This action cannot be undone. This will permanently remove the bus and its associations.
+            </p>
+            <div className="mb-4 text-sm bg-red-50 border border-red-200 rounded p-3">
+              <p className="text-red-700">To confirm, please type the bus number exactly:</p>
+              <p className="mt-1 font-mono text-red-800">{deleteBusTarget.bus_number}</p>
+            </div>
+            <input
+              type="text"
+              value={deleteConfirmInput}
+              onChange={(e) => setDeleteConfirmInput(e.target.value)}
+              placeholder="Type bus number to confirm"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500 mb-4"
+            />
+            <div className="flex space-x-3">
+              <button
+                onClick={async () => {
+                  await handleDeleteBus(deleteBusTarget.id);
+                  setDeleteBusTarget(null);
+                  setDeleteConfirmInput('');
+                }}
+                disabled={deleteConfirmInput !== deleteBusTarget.bus_number}
+                className={`py-2 px-6 rounded-lg transition-all duration-200 ${deleteConfirmInput === deleteBusTarget.bus_number ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-200 text-white cursor-not-allowed'}`}
+              >
+                Permanently Delete
+              </button>
+              <button
+                onClick={() => { setDeleteBusTarget(null); setDeleteConfirmInput(''); }}
+                className="border border-gray-300 text-gray-700 py-2 px-6 rounded-lg hover:bg-gray-50 transition-all duration-200"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
