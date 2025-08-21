@@ -6,6 +6,19 @@ import { useRealTime } from '../context/RealTimeContext';
 type Terminal = { id: string; name: string; lat: number; lng: number; address?: string };
 type Route = { id: string; name: string; start_terminal_id: string; end_terminal_id: string; path: number[][] };
 
+// API response type for bus locations
+type BusLocationResponse = {
+  busId: string;
+  latest: {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    speed?: number;
+    employeeId?: string;
+    timestamp: string;
+  };
+};
+
 // Generate a simple polyline path between two points
 const generatePath = (start: { lat: number; lng: number }, end: { lat: number; lng: number }, steps: number = 20): number[][] => {
   const path: number[][] = [];
@@ -21,6 +34,9 @@ const generatePath = (start: { lat: number; lng: number }, end: { lat: number; l
 
 export const BusMapTest: React.FC = () => {
   const { simulateLocation, setShowLocationHistory } = useRealTime();
+  const [buses, setBuses] = useState<Bus[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Base area: around Quezon City coordinates (same as default center)
   const base = { lat: 14.703002, lng: 121.064653 };
@@ -56,24 +72,54 @@ export const BusMapTest: React.FC = () => {
     });
   }, [terminals]);
 
-  // 10 mock buses seeded at each start terminal
-  const [buses, setBuses] = useState<Bus[]>(() => {
-    return Array.from({ length: 10 }).map((_, i) => {
-      const start = terminals[i];
-      return {
-        id: `b-${i + 1}`,
-        bus_number: `PINK-${(i + 1).toString().padStart(3, '0')}`,
-        route_id: `r-${i + 1}`,
-        current_location: { lat: start.lat, lng: start.lng },
-        status: 'active',
-        available_seats: 30,
-        total_seats: 50,
-        driver_id: null,
-        conductor_id: null,
-        terminal_id: terminals[i].id,
-      };
-    });
-  });
+  // Fetch bus locations from API
+  useEffect(() => {
+    const fetchBusLocations = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch('https://employee-server-89en.onrender.com/api/admin/locations');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data: BusLocationResponse[] = await response.json();
+        
+        // Transform API data to Bus type
+        const transformedBuses: Bus[] = data.map((busLocation, index) => ({
+          id: busLocation.busId,
+          bus_number: `BUS-${(index + 1).toString().padStart(3, '0')}`,
+          route_id: `r-${(index % 10) + 1}`, // Assign to one of the 10 routes
+          current_location: { 
+            lat: busLocation.latest.lat, 
+            lng: busLocation.latest.lng 
+          },
+          status: 'active',
+          available_seats: 30,
+          total_seats: 50,
+          driver_id: busLocation.latest.employeeId || null,
+          conductor_id: null,
+          terminal_id: terminals[index % terminals.length]?.id || terminals[0].id,
+        }));
+        
+        setBuses(transformedBuses);
+      } catch (err) {
+        console.error('Error fetching bus locations:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch bus locations');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBusLocations();
+    
+    // Set up polling every 30 seconds to refresh bus locations
+    const interval = setInterval(fetchBusLocations, 30000);
+    
+    return () => clearInterval(interval);
+  }, [terminals]);
 
   // Simulate user location moving along first route
   useEffect(() => {
@@ -88,31 +134,51 @@ export const BusMapTest: React.FC = () => {
     return () => clearInterval(interval);
   }, [routes, simulateLocation, setShowLocationHistory]);
 
-  // Animate buses along their routes
-  useEffect(() => {
-    const timers = routes.map((route, i) => {
-      let step = 0;
-      return setInterval(() => {
-        setBuses(prev => prev.map((b) => {
-          if (b.id !== `b-${i + 1}`) return b;
-          const p = route.path[step % route.path.length];
-          return { ...b, current_location: { lat: p[0], lng: p[1] } };
-        }));
-        step += 1;
-      }, 1200 + i * 80);
-    });
-    return () => { timers.forEach(clearInterval); };
-  }, [routes]);
-
   // Convert minimal terminals to shape expected by BusMap lookups
   const terminalsForMap = terminals.map(t => ({ id: t.id, name: t.name, lat: t.lat, lng: t.lng }));
   const routesForMap = routes.map(r => ({ id: r.id, name: r.name, start_terminal_id: r.start_terminal_id, end_terminal_id: r.end_terminal_id, path: r.path }));
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-lg p-4 shadow-sm border">
+          <h2 className="text-xl font-semibold text-gray-800">BusMap Test Harness</h2>
+          <p className="text-sm text-gray-600">Loading bus locations from API...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-lg p-4 shadow-sm border">
+          <h2 className="text-xl font-semibold text-gray-800">BusMap Test Harness</h2>
+          <div className="bg-red-50 border border-red-200 rounded-md p-3">
+            <p className="text-sm text-red-800">Error: {error}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="mt-2 px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg p-4 shadow-sm border">
         <h2 className="text-xl font-semibold text-gray-800">BusMap Test Harness</h2>
-        <p className="text-sm text-gray-600">Showing 10 mock buses, 10 routes, start/end terminals, user location, and connected polylines. Icons use /bus-icon.png and /user-pin.png.</p>
+        <p className="text-sm text-gray-600">
+          Showing {buses.length} real buses from API, 10 routes, start/end terminals, user location, and connected polylines. 
+          Icons use /bus-icon.png and /user-pin.png. Data refreshes every 30 seconds.
+        </p>
+        <div className="mt-2 text-xs text-gray-500">
+          Last updated: {new Date().toLocaleTimeString()}
+        </div>
       </div>
       <BusMap
         buses={buses}
