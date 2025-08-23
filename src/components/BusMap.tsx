@@ -4,18 +4,26 @@ import { LatLngExpression, Icon } from 'leaflet';
 import { Bus } from '../types';
 import { useRealTime } from '../context/RealTimeContext';
 import { LocationTrail } from './LocationTrail';
-import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
-import { LocationHistoryControls } from './LocationHistoryControls';
-import { EmployeeConnectionPanel } from './EmployeeConnectionPanel';
-// @ts-ignore: If Employee is not exported, define a fallback type
-type Employee = any;
 import 'leaflet/dist/leaflet.css';
 
 interface BusMapProps {
   buses: Bus[];
   routes: any[];
   terminals: any[];
-  assignedEmployees: Record<string, Employee>;
+  assignedEmployees: Record<string, any>;
+}
+
+// API response type for real-time bus locations
+interface BusLocationResponse {
+  busId: string;
+  latest: {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    speed?: number;
+    employeeId?: string;
+    timestamp: string;
+  };
 }
 
 // Custom bus icon (local asset in public folder)
@@ -52,10 +60,103 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
   const map = useMap();
   const { showLocationHistory, currentLocation } = useRealTime();
   const locationHistoryRef = useRef<Map<string, Array<{ lat: number; lng: number; timestamp: string }>>>(new Map());
+  const [realTimeBusLocations, setRealTimeBusLocations] = useState<Record<string, { lat: number; lng: number }>>({});
+  const [terminalCoordinates, setTerminalCoordinates] = useState<Record<string, { lat: number; lng: number }>>({});
 
   // Helper functions
   const getTerminal = (id: string) => terminals.find((t: any) => t.id === id);
   const getRoute = (id: string) => routes.find((r: any) => r.id === id);
+
+  // Function to search for terminal coordinates using Google Geocoding API
+  const searchTerminalCoordinates = async (terminalName: string): Promise<{ lat: number; lng: number } | null> => {
+    try {
+      // For now, we'll use a simple mapping of known terminals
+      // In a real implementation, you would use Google Geocoding API or similar
+      const knownTerminals: Record<string, { lat: number; lng: number }> = {
+        'Cabanatuan Central Transport Terminal': { lat: 15.4865, lng: 120.9675 },
+        'Baler Central Terminal': { lat: 15.7583, lng: 121.5608 },
+        'Manila Central Terminal': { lat: 14.5995, lng: 120.9842 },
+        'Quezon City Central Terminal': { lat: 14.6760, lng: 121.0437 },
+        'Makati Central Terminal': { lat: 14.5547, lng: 121.0244 },
+        'Pasig Central Terminal': { lat: 14.5764, lng: 121.0851 },
+        'Marikina Central Terminal': { lat: 14.6507, lng: 121.1029 },
+        'Antipolo Central Terminal': { lat: 14.6255, lng: 121.1245 },
+        'Cainta Central Terminal': { lat: 14.5786, lng: 121.1221 },
+        'Taytay Central Terminal': { lat: 14.5692, lng: 121.1325 }
+      };
+
+      // Check if we have known coordinates for this terminal
+      if (knownTerminals[terminalName]) {
+        return knownTerminals[terminalName];
+      }
+
+      // If not found, try to find a partial match
+      for (const [knownName, coords] of Object.entries(knownTerminals)) {
+        if (terminalName.toLowerCase().includes(knownName.toLowerCase().split(' ')[0]) ||
+            knownName.toLowerCase().includes(terminalName.toLowerCase().split(' ')[0])) {
+          return coords;
+        }
+      }
+
+      // Default fallback coordinates (center of Philippines)
+      return { lat: 12.8797, lng: 121.7740 };
+    } catch (error) {
+      console.error('Error searching for terminal coordinates:', error);
+      return null;
+    }
+  };
+
+  // Fetch real-time bus locations from API
+  useEffect(() => {
+    const fetchRealTimeLocations = async () => {
+      try {
+        const response = await fetch('https://employee-server-89en.onrender.com/api/admin/locations');
+        if (response.ok) {
+          const data: BusLocationResponse[] = await response.json();
+          const locations: Record<string, { lat: number; lng: number }> = {};
+          
+          data.forEach(item => {
+            locations[item.busId] = {
+              lat: item.latest.lat,
+              lng: item.latest.lng
+            };
+          });
+          
+          setRealTimeBusLocations(locations);
+        }
+      } catch (error) {
+        console.error('Error fetching real-time bus locations:', error);
+      }
+    };
+
+    fetchRealTimeLocations();
+    
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchRealTimeLocations, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Search for terminal coordinates when terminals change
+  useEffect(() => {
+    const searchTerminals = async () => {
+      const coords: Record<string, { lat: number; lng: number }> = {};
+      
+      for (const terminal of terminals) {
+        if (terminal.name) {
+          const terminalCoords = await searchTerminalCoordinates(terminal.name);
+          if (terminalCoords) {
+            coords[terminal.id] = terminalCoords;
+          }
+        }
+      }
+      
+      setTerminalCoordinates(coords);
+    };
+
+    if (terminals.length > 0) {
+      searchTerminals();
+    }
+  }, [terminals]);
 
   // Update location history for current employee
   useEffect(() => {
@@ -76,15 +177,17 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
     }
   }, [showLocationHistory, currentLocation]);
 
-  // Auto-fit map to show all buses and current location (fixed typing)
+  // Auto-fit map to show all buses and current location
   useEffect(() => {
     const latLngs: Array<[number, number]> = [];
 
-    // Add bus positions
+    // Add bus positions (use real-time locations if available)
     for (const bus of buses) {
-      const loc = bus.current_location;
-      if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number' && loc.lat !== 0 && loc.lng !== 0) {
-        latLngs.push([loc.lat, loc.lng]);
+      const realTimeLoc = realTimeBusLocations[bus.id];
+      if (realTimeLoc) {
+        latLngs.push([realTimeLoc.lat, realTimeLoc.lng]);
+      } else if (bus.current_location && typeof bus.current_location.lat === 'number' && typeof bus.current_location.lng === 'number' && bus.current_location.lat !== 0 && bus.current_location.lng !== 0) {
+        latLngs.push([bus.current_location.lat, bus.current_location.lng]);
       }
     }
 
@@ -98,7 +201,7 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
     } else if (latLngs.length > 1) {
       map.fitBounds(latLngs);
     }
-  }, [buses, currentLocation, map]);
+  }, [buses, realTimeBusLocations, currentLocation, map]);
 
   return (
     <>
@@ -107,28 +210,28 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       />
 
-      {/* Draw routes as polylines (fallback to straight line between start/end terminals) */}
+      {/* Draw routes as polylines between start and end terminals */}
       {buses.map(bus => {
         const route = getRoute(bus.route_id);
         if (!route) return null;
-        let positions: any[] | null = null;
-        if (Array.isArray(route.path) && route.path.length > 0) {
-          const validPath = route.path.filter((pt: any) => Array.isArray(pt) && pt.length === 2 && typeof pt[0] === 'number' && typeof pt[1] === 'number');
-          if (validPath.length >= 2) {
-            positions = validPath;
-          }
-        }
-        if (!positions) {
-          const start = route.start_terminal_id ? getTerminal(route.start_terminal_id) : null;
-          const end = route.end_terminal_id ? getTerminal(route.end_terminal_id) : null;
-          if (start && end && typeof start.lat === 'number' && typeof start.lng === 'number' && typeof end.lat === 'number' && typeof end.lng === 'number') {
-            positions = [
-              [start.lat, start.lng],
-              [end.lat, end.lng]
-            ];
-          }
-        }
-        if (!positions) return null;
+        
+        // Get start and end terminal coordinates
+        const startTerminal = route.start_terminal_id ? getTerminal(route.start_terminal_id) : null;
+        const endTerminal = route.end_terminal_id ? getTerminal(route.end_terminal_id) : null;
+        
+        if (!startTerminal || !endTerminal) return null;
+        
+        const startCoords = terminalCoordinates[startTerminal.id];
+        const endCoords = terminalCoordinates[endTerminal.id];
+        
+        if (!startCoords || !endCoords) return null;
+        
+        // Create a simple path between terminals
+        const positions: [number, number][] = [
+          [startCoords.lat, startCoords.lng],
+          [endCoords.lat, endCoords.lng]
+        ];
+        
         return (
           <Polyline
             key={bus.id + '-route'}
@@ -144,57 +247,70 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
       {buses.map(bus => {
         const route = getRoute(bus.route_id);
         if (!route) return null;
-        const startTerminal = getTerminal(route.start_terminal_id);
-        const endTerminal = getTerminal(route.end_terminal_id);
+        
+        const startTerminal = route.start_terminal_id ? getTerminal(route.start_terminal_id) : null;
+        const endTerminal = route.end_terminal_id ? getTerminal(route.end_terminal_id) : null;
+        
+        if (!startTerminal || !endTerminal) return null;
+        
+        const startCoords = terminalCoordinates[startTerminal.id];
+        const endCoords = terminalCoordinates[endTerminal.id];
+        
+        if (!startCoords || !endCoords) return null;
+        
         return (
           <React.Fragment key={bus.id + '-terminals'}>
-            {startTerminal && typeof startTerminal.lat === 'number' && typeof startTerminal.lng === 'number' && (
-              <Marker position={[startTerminal.lat, startTerminal.lng]} icon={startTerminalIcon}>
-                <Popup>
-                  <b>Start Terminal:</b> {startTerminal.name}
-                </Popup>
-              </Marker>
-            )}
-            {endTerminal && typeof endTerminal.lat === 'number' && typeof endTerminal.lng === 'number' && (
-              <Marker position={[endTerminal.lat, endTerminal.lng]} icon={endTerminalIcon}>
-                <Popup>
-                  <b>End Terminal:</b> {endTerminal.name}
-                </Popup>
-              </Marker>
-            )}
+            <Marker position={[startCoords.lat, startCoords.lng]} icon={startTerminalIcon}>
+              <Popup>
+                <b>Start Terminal:</b> {startTerminal.name}
+              </Popup>
+            </Marker>
+            <Marker position={[endCoords.lat, endCoords.lng]} icon={endTerminalIcon}>
+              <Popup>
+                <b>End Terminal:</b> {endTerminal.name}
+              </Popup>
+            </Marker>
           </React.Fragment>
         );
       })}
 
-      {/* Static bus markers with detailed popups */}
+      {/* Bus markers with real-time locations */}
       {buses.map((bus, idx) => {
-        // Use bus current_location if available, else fallback to terminal location
+        // Use real-time location if available, otherwise fallback to current_location or terminal
         let lat: number | undefined = undefined;
         let lng: number | undefined = undefined;
-        if (bus.current_location && typeof bus.current_location.lat === 'number' && typeof bus.current_location.lng === 'number') {
+        
+        const realTimeLoc = realTimeBusLocations[bus.id];
+        if (realTimeLoc) {
+          lat = realTimeLoc.lat;
+          lng = realTimeLoc.lng;
+        } else if (bus.current_location && typeof bus.current_location.lat === 'number' && typeof bus.current_location.lng === 'number') {
           lat = bus.current_location.lat;
           lng = bus.current_location.lng;
         } else if (bus.terminal_id) {
           const terminal = getTerminal(bus.terminal_id);
-          if (terminal && typeof terminal.lat === 'number' && typeof terminal.lng === 'number') {
-            lat = terminal.lat;
-            lng = terminal.lng;
+          if (terminal && terminalCoordinates[terminal.id]) {
+            lat = terminalCoordinates[terminal.id].lat;
+            lng = terminalCoordinates[terminal.id].lng;
           }
         }
-        // Final fallback: place near map center so every bus renders a marker
+        
+        // Final fallback: place near map center
         if (typeof lat !== 'number' || typeof lng !== 'number') {
           const center = map.getCenter();
-          const jitterRadius = 0.001; // ~100m depending on latitude
+          const jitterRadius = 0.001;
           const angle = (idx * 2 * Math.PI) / Math.max(buses.length, 1);
           lat = center.lat + jitterRadius * Math.cos(angle);
           lng = center.lng + jitterRadius * Math.sin(angle);
         }
+        
         const driver = bus.driver_id ? assignedEmployees[bus.driver_id] : null;
         const conductor = bus.conductor_id ? assignedEmployees[bus.conductor_id] : null;
         const route = getRoute(bus.route_id);
         const terminal = bus.terminal_id ? getTerminal(bus.terminal_id) : null;
         const startTerminal = route?.start_terminal_id ? getTerminal(route.start_terminal_id) : null;
         const endTerminal = route?.end_terminal_id ? getTerminal(route.end_terminal_id) : null;
+        
         return (
           <Marker
             key={bus.id}
@@ -204,22 +320,23 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
             <Tooltip direction="top" offset={[0, -20]} opacity={1} permanent={false} className="leaflet-tooltip-custom">
               <div className="text-xs font-semibold text-pink-700">Bus {bus.bus_number}</div>
               <div className="text-xs text-gray-700">Seats: {bus.available_seats}/{bus.total_seats}</div>
+              {realTimeLoc && (
+                <div className="text-xs text-green-600">📍 Real-time</div>
+              )}
             </Tooltip>
             <Popup>
               <div style={{ minWidth: 220 }} className="text-sm font-sans">
                 <div className="flex items-center mb-2">
                   <img src="/bus-icon.png" alt="Bus" className="w-6 h-6 mr-2" />
                   <span className="font-bold text-pink-700 text-base">Bus {bus.bus_number}</span>
+                  {realTimeLoc && (
+                    <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">📍 Real-time</span>
+                  )}
                 </div>
                 <div className="flex items-center mb-1">
                   <svg className="w-4 h-4 mr-1 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 20h5v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2h5"/><circle cx="12" cy="7" r="4"/></svg>
                   <span className="text-gray-700">Driver:</span>
-                  <span className="ml-1 font-medium text-gray-900">{driver ? driver.profile.fullName : 'Not assigned'}</span>
-                </div>
-                <div className="flex items-center mb-1">
-                  <svg className="w-4 h-4 mr-1 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg>
-                  <span className="text-gray-700">Status:</span>
-                  <span className="ml-1 font-medium text-gray-900">{bus.status}</span>
+                  <span className="ml-1 font-medium text-gray-900">{driver ? driver.profile?.fullName || driver.name || 'Not assigned' : 'Not assigned'}</span>
                 </div>
                 {driver && (
                   <div className="ml-5 mb-1 text-xs text-gray-600 space-y-0.5">
@@ -229,10 +346,15 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
                     </div>
                     <div className="flex items-center">
                       <svg className="w-3 h-3 mr-1 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92V21a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2 3.18 2 2 0 0 1 4 1h4.09a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.36a2 2 0 0 1-.45 2.11L9.1 8.9a16 16 0 0 0 6 6l1.71-1.08a2 2 0 0 1 2.11-.45c.76.24 1.55.42 2.36.54A2 2 0 0 1 22 16.92z"/></svg>
-                      <span>{driver.profile?.phone}</span>
+                      <span>{driver.profile?.phone || driver.phone}</span>
                     </div>
                   </div>
                 )}
+                <div className="flex items-center mb-1">
+                  <svg className="w-4 h-4 mr-1 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg>
+                  <span className="text-gray-700">Status:</span>
+                  <span className="ml-1 font-medium text-gray-900">{bus.status}</span>
+                </div>
                 <div className="flex items-center mb-1">
                   <svg className="w-4 h-4 mr-1 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3v4M8 3v4"/></svg>
                   <span className="text-gray-700">Seats:</span>
@@ -241,7 +363,7 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
                 <div className="flex items-center mb-1">
                   <svg className="w-4 h-4 mr-1 text-indigo-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 20h5v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2h5"/><circle cx="12" cy="7" r="4"/></svg>
                   <span className="text-gray-700">Conductor:</span>
-                  <span className="ml-1 font-medium text-gray-900">{conductor ? conductor.profile.fullName : 'Not assigned'}</span>
+                  <span className="ml-1 font-medium text-gray-900">{conductor ? conductor.profile?.fullName || conductor.name || 'Not assigned' : 'Not assigned'}</span>
                 </div>
                 {conductor && (
                   <div className="ml-5 mb-1 text-xs text-gray-600 space-y-0.5">
@@ -251,7 +373,7 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
                     </div>
                     <div className="flex items-center">
                       <svg className="w-3 h-3 mr-1 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92V21a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2 3.18 2 2 0 0 1 4 1h4.09a2 2 0 0 1 2 1.72c.12.81.3 1.6.54 2.36a2 2 0 0 1-.45 2.11L9.1 8.9a16 16 0 0 0 6 6l1.71-1.08a2 2 0 0 1 2.11-.45c.76.24 1.55.42 2.36.54A2 2 0 0 1 22 16.92z"/></svg>
-                      <span>{conductor.profile?.phone}</span>
+                      <span>{conductor.profile?.phone || conductor.phone}</span>
                     </div>
                   </div>
                 )}
@@ -275,6 +397,13 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
                   <span className="text-gray-700">End Terminal:</span>
                   <span className="ml-1 font-medium text-gray-900">{endTerminal ? endTerminal.name : 'Not assigned'}</span>
                 </div>
+                {realTimeLoc && (
+                  <div className="mt-2 pt-2 border-t border-green-200">
+                    <div className="text-xs text-green-600 font-medium">
+                      📍 Real-time location: {realTimeLoc.lat.toFixed(6)}, {realTimeLoc.lng.toFixed(6)}
+                    </div>
+                  </div>
+                )}
               </div>
             </Popup>
           </Marker>
@@ -331,7 +460,7 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
                     <span className="font-mono text-gray-800">{currentLocation.lat.toFixed(6)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Longitude:</span>
+                    <span className="text-gray-700">Longitude:</span>
                     <span className="font-mono text-gray-800">{currentLocation.lng.toFixed(6)}</span>
                   </div>
                   {currentLocation.accuracy && (
@@ -381,7 +510,7 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
 
 export const BusMap: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedEmployees }) => {
   const [showControls, setShowControls] = useState(false);
-  const { isConnected, employeeEmail, currentLocation } = useRealTime();
+  const { currentLocation } = useRealTime();
 
   return (
     <div className="relative">
@@ -414,35 +543,6 @@ export const BusMap: React.FC<BusMapProps> = ({ buses, routes, terminals, assign
           <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </button>
-
-      {/* Control Panel */}
-      {showControls && (
-        <div className="absolute top-16 right-4 z-10 w-80 space-y-4">
-          <EmployeeConnectionPanel />
-          <ConnectionStatusIndicator />
-          <LocationHistoryControls />
-        </div>
-      )}
-
-      {/* Connection Status Badge */}
-      {!isConnected && (
-        <div className="absolute top-4 left-4 z-10 bg-red-100 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
-          <div className="flex items-center space-x-2">
-            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-            <span>Not connected to real-time server</span>
-          </div>
-        </div>
-      )}
-
-      {/* Employee Status Badge */}
-      {employeeEmail && (
-        <div className="absolute top-16 left-4 z-10 bg-green-100 border border-green-300 text-green-700 px-3 py-2 rounded-lg text-sm">
-          <div className="flex items-center space-x-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span>Connected as: {employeeEmail}</span>
-          </div>
-        </div>
-      )}
 
       {/* Live Tracking Status */}
       {currentLocation && (

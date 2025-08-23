@@ -92,7 +92,7 @@ export const AuthPage: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-pink-600">Bus Tracker Admin</h1>
+          <h1 className="text-3xl font-bold text-pink-600">Auro Ride Admin</h1>
           <p className="text-gray-600 mt-2">Manage your bus tracking system with ease</p>
         </div>
 

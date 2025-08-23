@@ -1,10 +1,28 @@
 import React from 'react';
 import { Marker, Popup, Tooltip } from 'react-leaflet';
 import { LatLngExpression, Icon } from 'leaflet';
-import { EnhancedLocationUpdate } from '../services/websocketService';
+
+interface BusData {
+  busNumber: string;
+  route: string;
+  totalSeats: number;
+  availableSeats: number;
+  status: string;
+  passengers: number;
+}
 
 interface RealTimeBusMarkerProps {
-  bus: EnhancedLocationUpdate;
+  bus: {
+    location: {
+      lat: number;
+      lng: number;
+      accuracy?: number;
+    };
+    busData: BusData;
+    employeeEmail: string;
+    clientId: string;
+    timestamp: string;
+  };
   icon: Icon;
   showLocationHistory: boolean;
   locationHistory?: Array<{ lat: number; lng: number }>;
