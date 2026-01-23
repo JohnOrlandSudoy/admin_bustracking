@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { BusesTab } from './components/BusesTab';
 import { BusListTab } from './components/BusListTab';
@@ -7,11 +7,12 @@ import { RoutesTab } from './components/RoutesTab';
 import { UsersTab } from './components/UsersTab';
 import { FeedbacksTab } from './components/FeedbacksTab';
 import { NotificationsTab } from './components/NotificationsTab';
+import { ContactsTab } from './components/ContactsTab';
+import { RefundsTab } from './components/RefundsTab';
 import { EmployeeTab } from './components/EmployeeTab';
 import { ConfirmEmployeeTab } from './components/ConfirmEmployeeTab';
 import { ReportsTab } from './components/ReportsTab';
 import { BookingsTab } from './components/BookingsTab';
-import { BusMapTest } from './components/BusMapTest';
 import { useAppContext } from './context/AppContext';
 import { busAPI, terminalAPI, routeAPI, adminAPI } from './utils/api';
 import { LoadingSpinner } from './components/LoadingSpinner';
@@ -148,6 +149,8 @@ function App() {
         return <FeedbacksTab />;
       case 'notifications':
         return <NotificationsTab />;
+      case 'contacts':
+        return <ContactsTab />;
       case 'employee':
         return <EmployeeTab />;
       case 'confirm-employee':
@@ -156,8 +159,8 @@ function App() {
         return <ReportsTab />;
       case 'bookings':
         return <BookingsTab />;
-      case 'map-test':
-        return <BusMapTest />;
+      case 'refunds':
+        return <RefundsTab />;
       default:
         return (
           <BusesTab

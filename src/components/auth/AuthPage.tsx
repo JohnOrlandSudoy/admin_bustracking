@@ -13,7 +13,7 @@ export const AuthPage: React.FC = () => {
   // Redirect if already authenticated
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
-  }
+  } 
 
   const handleSignupSuccess = (email: string) => {
     setUserEmail(email);

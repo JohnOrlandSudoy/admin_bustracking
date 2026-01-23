@@ -1,13 +1,41 @@
 import axios from 'axios';
-import { Bus, Terminal, Route, NotificationPayload, BusReassignment, Feedback, FeedbackStats } from '../types';
+import { Bus, Terminal, Route, NotificationPayload, Feedback, FeedbackStats, Contact, ContactsResponse, RefundsResponse, RefundRequest } from '../types';
 
-const API_URL = 'https://backendbus-sumt.onrender.com/api/admin';
-const CLIENT_API_URL = 'https://backendbus-sumt.onrender.com/api/client';
+// Base URLs are configurable via Vite env vars. Keep sensible defaults for backward compatibility.
+const API_URL = (import.meta.env.VITE_ADMIN_API_URL as string) || 'https://backendbus-sumt.onrender.com/api/admin';
+const CLIENT_API_URL = (import.meta.env.VITE_CLIENT_API_URL as string) || 'https://backendbus-sumt.onrender.com/api/client';
+const ROOT_API_URL = (() => {
+  const override = (import.meta.env.VITE_API_BASE_URL as string) || '';
+  if (override) return override;
+  if (API_URL.includes('/api/admin')) return API_URL.replace('/api/admin', '/api');
+  return 'http://localhost:3000/api';
+})();
+
+
+
+// Attach Authorization header from localStorage token on every request (if present).
+axios.interceptors.request.use((config) => {
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers = config.headers || {};
+      // Only set Authorization if it's not already set
+      if (!('Authorization' in config.headers)) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+  } catch (err) {
+    // ignore (e.g., SSR or restricted environment)
+  }
+  return config;
+});
 
 // Helper function to handle API errors
 const handleApiError = (error: any) => {
   console.error('API error:', error);
-  throw new Error(error.response?.data?.message || error.message || 'An error occurred');
+  const data = error?.response?.data;
+  const msg = (data && (data.error || data.message)) || error.message || 'An error occurred';
+  throw new Error(msg);
 };
 
 export const busAPI = {
@@ -287,6 +315,22 @@ export const feedbackAPI = {
   },
 };
 
+export const contactAPI = {
+  getContacts: async (params: { status?: string; page?: number; limit?: number }) => {
+    try {
+      const query = new URLSearchParams();
+      if (params.status && params.status !== 'all') query.append('status', params.status);
+      if (params.page) query.append('page', String(params.page));
+      if (params.limit) query.append('limit', String(params.limit));
+      const response = await axios.get(`${API_URL}/contacts${query.toString() ? `?${query.toString()}` : ''}`);
+      return { data: response.data as ContactsResponse };
+    } catch (error) {
+      handleApiError(error);
+      return { data: { contacts: [] as Contact[], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } } };
+    }
+  },
+};
+
 export const adminAPI = {
   createEmployee: async (employeeData: any) => {
     try {
@@ -359,3 +403,66 @@ export const bookingAPI = {
         }
       },
   };
+
+export const refundAPI = {
+  getRefunds: async (params: { page?: number; limit?: number } = {}) => {
+    try {
+      const query = new URLSearchParams();
+      if (params.page) query.append('page', String(params.page));
+      if (params.limit) query.append('limit', String(params.limit));
+      const response = await axios.get(`${API_URL}/refunds${query.toString() ? `?${query.toString()}` : ''}`);
+      return { data: response.data as RefundsResponse };
+    } catch (error) {
+      handleApiError(error);
+      return { data: { refunds: [] as RefundRequest[], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } } };
+    }
+  },
+  getRefundById: async (id: string) => {
+    try {
+      const response = await axios.get(`${API_URL}/refunds/${id}`);
+      return { data: response.data as RefundRequest };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
+    }
+  },
+  updateRefundStatus: async (id: string, status: 'pending' | 'approved' | 'rejected', note?: string) => {
+    try {
+      const response = await axios.put(`${API_URL}/refund/${id}/status`, { status, note });
+      return { data: response.data as RefundRequest };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
+    }
+  }
+};
+
+export const otpAPI = {
+  sendOtp: async (email: string) => {
+    try {
+      const response = await axios.post(`${ROOT_API_URL}/auth/send-otp`, { email });
+      return { success: true, data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { success: false, data: null };
+    }
+  },
+  verifyOtp: async (email: string, code: string) => {
+    try {
+      const response = await axios.post(`${ROOT_API_URL}/auth/verify-otp`, { email, code });
+      return { success: true, data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { success: false, data: null };
+    }
+  },
+  updatePasswordWithOtp: async (email: string, code: string, newPassword: string) => {
+    try {
+      const response = await axios.post(`${ROOT_API_URL}/auth/update-password-with-otp`, { email, code, newPassword });
+      return { success: true, data: response.data };
+    } catch (error) {
+      handleApiError(error);
+      return { success: false, data: null };
+    }
+  }
+};

@@ -90,3 +90,44 @@ export interface FeedbackStats {
     feedback_count: number;
   }[];
 }
+
+export interface Contact {
+  id: string;
+  full_name: string;
+  email: string;
+  message: string;
+  status: string;
+  created_at: string;
+}
+
+export interface ContactsResponse {
+  contacts: Contact[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface RefundRequest {
+  id: string;
+  full_name: string;
+  email: string;
+  reason: string;
+  proof_url: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  note?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface RefundsResponse {
+  refunds: RefundRequest[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}

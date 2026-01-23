@@ -3,7 +3,7 @@ import { Bus } from '../types';
 import { busAPI, terminalAPI, routeAPI } from '../utils/api';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ErrorAlert } from './ErrorAlert';
-import { Search, Filter, Bus as BusIcon, Users, MapPin, Settings, Plus, Map, Clock } from 'lucide-react';
+import { Search, Filter, Bus as BusIcon, Users, MapPin, Settings, Map, Clock } from 'lucide-react';
 
 // API response type for real-time bus locations
 interface BusLocationResponse {
@@ -51,7 +51,8 @@ export const BusListTab: React.FC = () => {
   // Fetch real-time bus locations from API
   const fetchRealTimeLocations = async () => {
     try {
-      const response = await fetch('https://employee-server-89en.onrender.com/api/admin/locations');
+      const employeeBase = (import.meta.env.VITE_EMPLOYEE_SERVER_URL as string) || 'https://employee-server-89en.onrender.com';
+      const response = await fetch(`${employeeBase}/api/admin/locations`);
       if (response.ok) {
         const data: BusLocationResponse[] = await response.json();
         const locations: Record<string, LocationData> = {};
@@ -239,7 +240,7 @@ export const BusListTab: React.FC = () => {
         </div>
       </div>
 
-      {error && <ErrorAlert message={error} />}
+  {error && <ErrorAlert message={error} onClose={() => setError(null)} />}
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-md p-6">

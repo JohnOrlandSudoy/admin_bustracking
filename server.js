@@ -166,7 +166,7 @@ app.put('/api/admin/booking/:id/confirm', async (req, res) => {
 
     // 4. Create notification for the driver
     if (driverId) {
-      notifications.push({
+      notifications.push({ 
         recipient_id: driverId,
         type: 'new_passenger',
         message: `New passenger: ${user.profile?.fullName || user.username} has booked a seat on your bus.`

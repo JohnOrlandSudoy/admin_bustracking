@@ -110,7 +110,8 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
   useEffect(() => {
     const fetchRealTimeLocations = async () => {
       try {
-        const response = await fetch('https://employee-server-89en.onrender.com/api/admin/locations');
+        const employeeBase = (import.meta.env.VITE_EMPLOYEE_SERVER_URL as string) || 'https://employee-server-89en.onrender.com';
+        const response = await fetch(`${employeeBase}/api/admin/locations`);
         if (response.ok) {
           const data: BusLocationResponse[] = await response.json();
           const locations: Record<string, { lat: number; lng: number }> = {};

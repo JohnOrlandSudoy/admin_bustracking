@@ -79,7 +79,8 @@ export const BusMapTest: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('https://employee-server-89en.onrender.com/api/admin/locations');
+        const employeeBase = (import.meta.env.VITE_EMPLOYEE_SERVER_URL as string) || 'https://employee-server-89en.onrender.com';
+        const response = await fetch(`${employeeBase}/api/admin/locations`);
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);

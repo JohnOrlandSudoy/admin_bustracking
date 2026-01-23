@@ -394,7 +394,7 @@ export const BusesTab: React.FC<BusesTabProps> = ({
       </div>
 
       {/* Bus Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr">
         {displayBuses.map((bus) => {
           const driver = bus.driver_id ? displayAssignedEmployees[bus.driver_id] : null;
           const conductor = bus.conductor_id ? displayAssignedEmployees[bus.conductor_id] : null;
@@ -403,7 +403,7 @@ export const BusesTab: React.FC<BusesTabProps> = ({
           const endTerminalName = route?.end_terminal_id ? (displayTerminals.find(t => t.id === route.end_terminal_id)?.name || 'Unknown') : 'Not assigned';
 
           return (
-            <div key={bus.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-all duration-200">
+            <div key={bus.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-all duration-200 h-full flex flex-col">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">Bus {bus.bus_number}</h3>
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(bus.status)}`}>
@@ -411,7 +411,7 @@ export const BusesTab: React.FC<BusesTabProps> = ({
                 </span>
               </div>
               
-              <div className="space-y-2 text-sm text-gray-600">
+              <div className="flex-1 space-y-2 text-sm text-gray-600">
                 <div className="flex items-center">
                   <Users className="h-4 w-4 mr-2" />
                   Seats: {bus.available_seats}/{bus.total_seats}
@@ -478,27 +478,29 @@ export const BusesTab: React.FC<BusesTabProps> = ({
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="mt-4">
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setSelectedBus(bus)}
+                    className="col-span-2 bg-gradient-to-r from-pink-500 to-pink-600 text-white h-10 px-4 rounded-lg hover:from-pink-600 hover:to-pink-700 transition-all duration-200 flex items-center justify-center"
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Assign Employee
+                  </button>
+                  <button
+                    onClick={() => openEditModal(bus)}
+                    className="border border-gray-300 text-gray-700 h-10 px-4 rounded-lg hover:bg-gray-50 transition-all duration-200"
+                  >
+                    Edit
+                  </button>
+                </div>
                 <button
-                  onClick={() => setSelectedBus(bus)}
-                  className="col-span-2 bg-gradient-to-r from-pink-500 to-pink-600 text-white py-2 px-4 rounded-lg hover:from-pink-600 hover:to-pink-700 transition-all duration-200 flex items-center justify-center"
+                  onClick={() => { setDeleteBusTarget(bus); setDeleteConfirmInput(''); }}
+                  className="mt-3 w-full border border-red-300 text-red-600 h-10 px-4 rounded-lg hover:bg-red-50 transition-all duration-200"
                 >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Assign Employee
-                </button>
-                <button
-                  onClick={() => openEditModal(bus)}
-                  className="border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 transition-all duration-200"
-                >
-                  Edit
+                  Delete
                 </button>
               </div>
-              <button
-                onClick={() => { setDeleteBusTarget(bus); setDeleteConfirmInput(''); }}
-                className="mt-2 w-full border border-red-300 text-red-600 py-2 px-4 rounded-lg hover:bg-red-50 transition-all duration-200"
-              >
-                Delete
-              </button>
             </div>
           );
         })}
