@@ -131,3 +131,33 @@ export interface RefundsResponse {
     totalPages: number;
   };
 }
+
+export interface DiscountVerification {
+  id: string;
+  user_id: string;
+  type: 'student' | 'senior_citizen';
+  id_image_url: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejection_reason: string | null;
+  submitted_at: string;
+  verified_at: string | null;
+  verified_by: string | null;
+  // Join fields
+  user?: {
+    username: string;
+    email: string;
+    profile?: {
+      fullName?: string;
+    };
+  };
+}
+
+export interface DiscountVerificationsResponse {
+  verifications: DiscountVerification[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}

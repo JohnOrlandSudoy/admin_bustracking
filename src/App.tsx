@@ -13,6 +13,7 @@ import { EmployeeTab } from './components/EmployeeTab';
 import { ConfirmEmployeeTab } from './components/ConfirmEmployeeTab';
 import { ReportsTab } from './components/ReportsTab';
 import { BookingsTab } from './components/BookingsTab';
+import { DiscountsTab } from './components/DiscountsTab';
 import { useAppContext } from './context/AppContext';
 import { busAPI, terminalAPI, routeAPI, adminAPI } from './utils/api';
 import { LoadingSpinner } from './components/LoadingSpinner';
@@ -161,6 +162,8 @@ function App() {
         return <BookingsTab />;
       case 'refunds':
         return <RefundsTab />;
+      case 'discounts':
+        return <DiscountsTab />;
       default:
         return (
           <BusesTab

@@ -9,11 +9,19 @@ dotenv.config();
 const app = express();
 
 // Initialize Supabase
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Missing Supabase URL or Key. Please check your .env file.');
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Supabase real-time subscriptions
 supabase
@@ -114,7 +122,240 @@ app.post('/api/client/feedback', async (req, res) => {
   }
 });
 
+// --- Discount Verification (Client) ---
+
+app.post('/api/client/discount/upload', async (req, res) => {
+  try {
+    const { file_base64, filename, content_type, user_id } = req.body;
+    
+    if (!file_base64 || !filename) {
+      return res.status(400).json({ error: 'Missing file data' });
+    }
+
+    // Ensure bucket exists
+    const { data: buckets, error: listBucketsError } = await supabase.storage.listBuckets();
+    let bucketExists = false;
+    
+    if (listBucketsError) {
+      console.error('Error listing buckets:', listBucketsError);
+      // Assume it doesn't exist or we can't check, so we might try to create or just proceed
+    } else if (buckets) {
+      bucketExists = buckets.some(b => b.name === 'discount-ids');
+    }
+
+    if (!bucketExists) {
+      const { error: createBucketError } = await supabase.storage.createBucket('discount-ids', {
+        public: true,
+        fileSizeLimit: 5242880, // 5MB
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg']
+      });
+      if (createBucketError) {
+         console.error('Error creating bucket:', createBucketError);
+         // Try to proceed, maybe it was created concurrently or error is misleading
+      }
+    }
+
+    const buffer = Buffer.from(file_base64, 'base64');
+    // Ensure filename is safe
+    const safeFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const path = `${user_id}/${Date.now()}_${safeFilename}`;
+    
+    // Upload to 'discount-ids' bucket
+    const { data, error } = await supabase
+      .storage
+      .from('discount-ids')
+      .upload(path, buffer, {
+        contentType: content_type || 'image/jpeg',
+        upsert: true
+      });
+
+    if (error) {
+      console.error('Supabase upload error:', error);
+      throw error;
+    }
+
+    const { data: { publicUrl } } = supabase
+      .storage
+      .from('discount-ids')
+      .getPublicUrl(path);
+
+    res.json({ publicUrl, path });
+  } catch (error) {
+    console.error('Upload error details:', error);
+    res.status(500).json({ error: error.message, details: error });
+  }
+});
+
+app.post('/api/client/discount-verification', async (req, res) => {
+  try {
+    const { userId, type, idImageUrl, email, username, fullName } = req.body;
+    
+    // Check if user exists in public.users to prevent FK violation
+    const { data: userExists } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .single();
+
+    if (!userExists) {
+      console.log(`User ${userId} not found in public.users. Creating record...`);
+      // Create user record in public.users
+      const { error: createUserError } = await supabase
+        .from('users')
+        .insert({
+          id: userId,
+          email: email || `user_${userId}@example.com`, // Fallback if email missing
+          username: username || email?.split('@')[0] || `user_${userId.substring(0, 8)}`,
+          role: 'client',
+          status: 'active',
+          profile: fullName ? { fullName } : {}
+        });
+      
+      if (createUserError) {
+        console.error('Error creating user in public.users:', createUserError);
+        // If error is duplicate key, ignore it (race condition)
+        if (createUserError.code !== '23505') {
+             throw new Error(`Failed to ensure user record: ${createUserError.message}`);
+        }
+      }
+    }
+    
+    // Check for existing pending request
+    const { data: existing } = await supabase
+      .from('discount_verifications')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .single();
+      
+    if (existing) {
+      return res.status(400).json({ error: 'You already have a pending verification request.' });
+    }
+
+    const { data, error } = await supabase
+      .from('discount_verifications')
+      .insert({
+        user_id: userId,
+        type,
+        id_image_url: idImageUrl,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('Discount verification error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/client/discount-verification/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { data, error } = await supabase
+      .from('discount_verifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    
+    res.json(data || null);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Admin Routes
+
+// Discount Verifications Management
+app.get('/api/admin/discount-verifications', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = supabase
+      .from('discount_verifications')
+      .select('*, user:user_id(id, username, email, profile)', { count: 'exact' });
+
+    if (status && status !== 'all') {
+      query = query.eq('status', status);
+    }
+
+    const { data, count, error } = await query
+      .order('submitted_at', { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
+
+    if (error) throw error;
+
+    res.json({
+      verifications: data,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: count,
+        totalPages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/admin/discount-verification/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, rejectionReason, adminId } = req.body;
+
+    if (!['approved', 'rejected', 'pending'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const updateData = {
+      status,
+      verified_at: new Date().toISOString(),
+      verified_by: adminId
+    };
+
+    if (status === 'rejected') {
+      updateData.rejection_reason = rejectionReason;
+    } else {
+      updateData.rejection_reason = null;
+    }
+
+    const { data, error } = await supabase
+      .from('discount_verifications')
+      .update(updateData)
+      .eq('id', id)
+      .select('*, user:user_id(*)')
+      .single();
+
+    if (error) throw error;
+
+    // Send notification to user
+    if (data && data.user_id) {
+       const message = status === 'approved' 
+        ? `Your discount verification for ${data.type} has been approved!`
+        : status === 'rejected' 
+          ? `Your discount verification for ${data.type} has been rejected. Reason: ${rejectionReason}`
+          : `Your discount verification status has been updated to pending.`;
+       
+       await supabase.from('notifications').insert({
+         recipient_id: data.user_id,
+         type: 'system',
+         message
+       });
+    }
+
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 app.get('/api/admin/transit-insights', async (req, res) => {
   try {

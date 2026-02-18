@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Bus, Terminal, Route, NotificationPayload, Feedback, FeedbackStats, Contact, ContactsResponse, RefundsResponse, RefundRequest } from '../types';
+import { Bus, Terminal, Route, NotificationPayload, Feedback, FeedbackStats, Contact, ContactsResponse, RefundsResponse, RefundRequest, DiscountVerification, DiscountVerificationsResponse } from '../types';
 
 // Base URLs are configurable via Vite env vars. Keep sensible defaults for backward compatibility.
 const API_URL = (import.meta.env.VITE_ADMIN_API_URL as string) || 'https://backendbus-sumt.onrender.com/api/admin';
@@ -463,6 +463,33 @@ export const otpAPI = {
     } catch (error) {
       handleApiError(error);
       return { success: false, data: null };
+    }
+  }
+};
+
+export const discountAPI = {
+  getVerifications: async (params: { page?: number; limit?: number; status?: string } = {}) => {
+    try {
+      const query = new URLSearchParams();
+      if (params.page) query.append('page', String(params.page));
+      if (params.limit) query.append('limit', String(params.limit));
+      if (params.status) query.append('status', params.status);
+      // Using API_URL which is /api/admin
+      const response = await axios.get(`${API_URL}/discount-verifications${query.toString() ? `?${query.toString()}` : ''}`);
+      return { data: response.data as DiscountVerificationsResponse };
+    } catch (error) {
+      handleApiError(error);
+      return { data: { verifications: [] as DiscountVerification[], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } } };
+    }
+  },
+  updateVerificationStatus: async (id: string, status: 'approved' | 'rejected', rejectionReason?: string, adminId?: string) => {
+    try {
+      // The backend route I created is app.put('/api/admin/discount-verification/:id', ...)
+      const response = await axios.put(`${API_URL}/discount-verification/${id}`, { status, rejectionReason, adminId });
+      return { data: response.data as DiscountVerification };
+    } catch (error) {
+      handleApiError(error);
+      return { data: null };
     }
   }
 };
