@@ -258,13 +258,17 @@ app.get('/api/client/discount-verification/:userId', async (req, res) => {
       .from('discount_verifications')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false })
+      .order('submitted_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (error && error.code !== 'PGRST116') throw error;
-    
-    res.json(data || null);
+
+    if (!data) {
+      return res.json({ status: 'none' });
+    }
+
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

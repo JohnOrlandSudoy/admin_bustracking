@@ -28,7 +28,22 @@ export interface Terminal {
   id: string;
   name: string;
   address: string;
+  lat?: number | null;
+  lng?: number | null;
+  place_id?: string | null;
+  formatted_address?: string | null;
+  map_verified?: boolean;
 }
+
+export type TerminalCreatePayload = {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  place_id?: string | null;
+  formatted_address?: string;
+  map_verified: boolean;
+};
 
 export interface Route {
   id: string;

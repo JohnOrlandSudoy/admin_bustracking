@@ -79,16 +79,31 @@ export interface Database {
           id: string;
           name: string;
           address: string;
+          lat: number | null;
+          lng: number | null;
+          place_id: string | null;
+          formatted_address: string | null;
+          map_verified: boolean;
         };
         Insert: {
           id?: string;
           name: string;
           address: string;
+          lat?: number | null;
+          lng?: number | null;
+          place_id?: string | null;
+          formatted_address?: string | null;
+          map_verified?: boolean;
         };
         Update: {
           id?: string;
           name?: string;
           address?: string;
+          lat?: number | null;
+          lng?: number | null;
+          place_id?: string | null;
+          formatted_address?: string | null;
+          map_verified?: boolean;
         };
       };
       routes: {

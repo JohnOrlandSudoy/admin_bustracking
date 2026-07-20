@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Bus, Terminal, Route, NotificationPayload, Feedback, FeedbackStats, Contact, ContactsResponse, RefundsResponse, RefundRequest, DiscountVerification, DiscountVerificationsResponse } from '../types';
+import { Bus, Terminal, TerminalCreatePayload, Route, NotificationPayload, Feedback, FeedbackStats, Contact, ContactsResponse, RefundsResponse, RefundRequest, DiscountVerification, DiscountVerificationsResponse } from '../types';
 
 // Base URLs are configurable via Vite env vars. Keep sensible defaults for backward compatibility.
 const API_URL = (import.meta.env.VITE_ADMIN_API_URL as string) || 'https://backendbus-sumt.onrender.com/api/admin';
@@ -113,7 +113,7 @@ export const terminalAPI = {
     }
   },
 
-  createTerminal: async (terminalData: Omit<Terminal, 'id'>) => {
+  createTerminal: async (terminalData: TerminalCreatePayload) => {
     try {
       const response = await axios.post(`${API_URL}/terminal`, terminalData);
       return { data: response.data };

@@ -137,25 +137,28 @@ const MapContent: React.FC<BusMapProps> = ({ buses, routes, terminals, assignedE
     return () => clearInterval(interval);
   }, []);
 
-  // Search for terminal coordinates when terminals change
+  // Resolve terminal coordinates: prefer verified lat/lng from DB, then legacy name lookup
   useEffect(() => {
-    const searchTerminals = async () => {
+    const resolveTerminals = async () => {
       const coords: Record<string, { lat: number; lng: number }> = {};
-      
+
       for (const terminal of terminals) {
-        if (terminal.name) {
-          const terminalCoords = await searchTerminalCoordinates(terminal.name);
+        const t = terminal as { id: string; name?: string; lat?: number | null; lng?: number | null };
+        if (typeof t.lat === 'number' && typeof t.lng === 'number' && Number.isFinite(t.lat) && Number.isFinite(t.lng)) {
+          coords[t.id] = { lat: t.lat, lng: t.lng };
+        } else if (t.name) {
+          const terminalCoords = await searchTerminalCoordinates(t.name);
           if (terminalCoords) {
-            coords[terminal.id] = terminalCoords;
+            coords[t.id] = terminalCoords;
           }
         }
       }
-      
+
       setTerminalCoordinates(coords);
     };
 
     if (terminals.length > 0) {
-      searchTerminals();
+      resolveTerminals();
     }
   }, [terminals]);
 
